@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package nyxrpc;
+
+option go_package = "../pb";
+
+service NYXRpc {
+    rpc Call (Request) returns (Reply) {}
+    rpc CallStream (Request) returns (stream Reply) {}
+}
+
+message Request {
+    string method = 1;
+    map <int32, string> keys = 2;
+    map <int32, string> types = 3;
+    map <int32, bytes> values = 4;
+}
+
+message Reply {
+    int32 code = 1;
+    int32 consume = 2;
+    int64 time= 3;
+    string msg = 4;
+    ReplyData data = 5;
+}
+
+message ReplyData {
+    map <int32, string> keys = 1;
+    map <int32, string> types = 2;
+    map <int32, bytes> values = 3;
+}
+

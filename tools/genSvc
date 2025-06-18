@@ -1,0 +1,124 @@
+#!/bin/bash
+
+dir=`pwd`
+app=`basename $dir`
+
+if [ "$app" == "tools" ]; then
+    cd ..
+    dir=`pwd`
+    app=`basename $dir`
+fi
+
+function showHelp
+{
+    printf "Usage: nyx gen svc <options>\n" 
+    printf "Options:
+    -f, 强制生成，如果已存在则覆盖
+    -m, 模块名\n" 
+}
+
+while getopts "fhm:" arg #选项后面的冒号表示该选项需要参数
+do
+    case $arg in #参数值存在$OPTARG中
+        f)  
+        is_force=Y
+        ;;  
+        m)
+        svc_name=$OPTARG
+        ;; 
+        h)
+        showHelp
+        exit 1
+        ;; 
+        ?)  #当有不认识的选项的时候arg为?
+        echo "unkonw argument"
+        showHelp
+        exit 1
+        ;;  
+    esac
+done
+
+if [  "" = "$svc_name" ]; then
+    showHelp
+    exit 1
+fi
+
+function tocamel {
+#{{{
+    name=$1
+
+    OLD_IFS="$IFS"
+    IFS="_"
+    arr=($name)
+    IFS="$OLD_IFS"
+
+    camel=""
+    for s in ${arr[@]}
+    do
+        camel="$camel"$(ucfirst $s)
+    done
+
+    echo $camel
+}
+#}}}
+
+function ucfirst {
+#{{{
+    name=`echo $1 | tr '[A-Z]' '[a-z]'`
+    first_char=${name:0:1}
+    other_chars=${name:1}
+    echo `echo $first_char| tr '[a-z]' '[A-Z]'`$other_chars
+}
+#}}}
+
+svc_name=$(tocamel $svc_name)
+
+svc_dir=${dir}/svc
+svc_file=${svc_dir}/${svc_name}Svc.go
+
+function genSvc {
+#{{{
+echo "package svc" >> $svc_file
+echo "" >> $svc_file
+echo "//此文件是由 tools/genSvc 自动生成, 可按需要修改" >> $svc_file
+echo "" >> $svc_file
+echo "import (" >> $svc_file
+echo "	\"github.com/nyxless/nyx/svc\"" >> $svc_file
+echo ")" >> $svc_file
+echo "" >> $svc_file
+echo "func ${svc_name}() *${svc_name}Svc {" >> $svc_file
+echo "	return &${svc_name}Svc{}" >> $svc_file
+echo "}" >> $svc_file
+echo "" >> $svc_file
+echo "type ${svc_name}Svc struct {" >> $svc_file
+echo "	svc.Svc" >> $svc_file
+echo "}" >> $svc_file
+echo "" >> $svc_file
+}
+#}}}
+
+
+       
+    if test -e $svc_file ;then
+        echo "file [$svc_file] exists!"
+
+        if [ "$is_force" = "Y" ]; then
+            mv $svc_file $svc_file.bak
+            echo "backup file saved at [$svc_file.bak]"
+            genSvc
+            echo "regenerated svc file $svc_file"
+            echo "success!"
+        fi
+    else
+        mkdir -p $svc_dir
+        genSvc
+
+        if test -e $svc_file; then
+            echo "generated svc file $svc_file"
+            echo "success!"
+        fi
+    fi
+
+
+
+

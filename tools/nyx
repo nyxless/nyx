@@ -1,0 +1,404 @@
+#!/bin/bash
+
+# 全局变量
+ROOT_DIR=`pwd`
+BIN_DIR=$ROOT_DIR/bin
+APP_NAME=`basename $ROOT_DIR`
+DEFAULT_CONF="conf/app.conf"
+DEFAULT_OUTPUT="$BIN_DIR/${APP_NAME}"
+GO_CMD="go"
+MODULE_MODE="${GO111MODULE:-on}"
+DEFAULT_LDFLAGS="-s -w"  # 默认链接器参数
+
+TOOLS_DIR="${ROOT_DIR}/tools"
+
+
+# 显示帮助信息 
+show_help() {
+    echo "$1"
+    show_commands "$1" | less -R
+}
+
+show_commands() {
+    echo $1
+    echo 
+    printf "\033[1mNyx 脚手架\033[0m"
+    cat <<EOF
+
+Usage: $0 <command> [options]
+
+命令列表:
+  run       运行应用程序
+    -c          配置文件路径
+    -t          构建标签(逗号分隔)
+    -d          调试模式
+    -m          运行模式(http,rpc,cli,tcp,ws 可组合,使用逗号分隔)
+    -p          cli模式时，访问URI路径,  格式同 http uri, 如: user/getUserInfo
+    -q          cli模式时，参数列表,  格式同 http query, 如: uid=1&username=test
+                
+  build         编译应用程序
+    -t          构建标签
+    -o          输出路径
+    --cross     跨平台编译(如 linux/amd64)
+    --debug     保留调试信息
+    --ldflags   自定义链接器标志
+                (默认: ${DEFAULT_LDFLAGS})
+
+  init      初始化应用程序, 生成路由配置代码(也可以手动在代码里配置)
+
+  gen       生成示例代码 
+    orm       从 sql 文件生成，具有 orm 功能的 dao/model 文件 
+      -f        强制生成，如果已存在则覆盖
+      -c        在配置文件中的配置名, 默认: db_master,db_slave 
+      -s        sql文件名 
+      -t        指定表名, 需要在 sql 文件中存在, 多个逗号分隔，默认全部生成 
+      -h        哈希分表, 如: 'user:10' 表示user表按主键哈希分成10个表，若主键为数值类型则取模，若为字符串类型则crc32后再取模，多个表用逗号分隔
+      -m        指定生成[api | rpc | svc | dao | model]文件(api、rpc 指controller文件), 多个逗号分隔，默认全部生成
+      -g        controller 分组路径, 默认无
+    dao       生成dao文件 
+      -f        强制生成，如果已存在则覆盖
+      -c        配置文件名, 默认: db_master,db_slave 
+      -t        表名 
+      -p        主键名，默认: id
+      -n        哈希分表数值, 默认: 1"
+    model     生成model文件
+      -f        强制生成，如果已存在则覆盖
+      -m        模块名 
+    rpc       生成rpc model 文件 
+      -f        强制生成，如果已存在则覆盖
+      -m        模块名 
+      -r        rpc方法名，多个逗号分隔, 使用basename作为函数名
+      -p        rpc方法名前缀，多个相同路径的方法，可统一指定前缀
+   
+  server    服务管理
+    start     启动服务
+      -i        应用程序文件, 默认 bin/${APP_NAME}
+      -f        配置文件
+      -t        构建标签
+      -d        调试模式
+      -m        运行模式
+    stop      停止服务
+    restart   重启服务
+    reload    平滑重启 
+
+EOF
+}
+
+wait_for () {
+        try=0
+        #先sleep1秒, 防止启动后马上又出错退出的情况
+        sleep 1
+
+        app=$2
+        while test $try -lt 5 ; do
+        case "$1" in
+            'created')
+                    alive=`ps -ef | grep $app | grep -v grep | awk '{print $2}'`
+
+                    if [ "$alive" != "" ]; then
+                        return 0
+                    fi
+                ;;
+
+            'removed')
+                    alive=`ps -ef | grep $app | grep -v grep | awk '{print $2}'`
+
+                    if [ "$alive" = "" ]; then
+                        return 0
+                    fi
+                ;;
+        esac
+
+
+               printf .
+
+                try=`expr $try + 1`
+                sleep 1
+
+        done
+        return 1
+}
+
+# 运行应用
+run_app() {
+    local conf="$DEFAULT_CONF"
+    local tags=""
+    local debug=false
+    local modes="http"
+    local extra_args=()  # 明确定义为空数组
+
+    # 解析参数 / Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -c) conf="$2"; shift 2 ;;
+            -t) tags="$2"; shift 2 ;;
+            -d) debug=true; shift ;;
+            -m) modes="$2"; shift 2 ;;
+            -p) path="$2"; shift 2 ;;
+            -q) query="$2"; shift 2 ;;
+            --) shift; extra_args+=("$@"); break ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+
+    if [ "$modes" == "cli" ]; then
+        if [ "$path" == "" ]; then
+            echo "请提供访问路径"
+            show_help
+            exit 0
+        fi
+        cli_args="-p ${path}"
+        if [ "$query" != "" ]; then
+        cli_args="${cli_args} -q ${query}"
+        fi
+    fi
+    # 构建标签参数 / Build tags arguments
+    local tag_args=()
+    [[ -n "$tags" ]] && tag_args=("-tags" "$tags")
+
+    # 调试模式
+    if $debug; then
+        extra_args+=("-d")
+    fi
+
+    # 设置环境变量 / Set environment variables
+    export APP_RUN_MODES="$modes"
+
+    #echo "正在启动: 模式[$modes], 配置[$conf]"
+    
+    # 安全地使用数组传递参数
+    local cmd=("${GO_CMD}" "run")
+    [[ ${#tag_args[@]} -gt 0 ]] && cmd+=("${tag_args[@]}")
+    cmd+=("main.go" "-c" "$conf" "-m" "$modes" $cli_args)
+    [[ ${#extra_args[@]} -gt 0 ]] && cmd+=("${extra_args[@]}")
+    
+    "${cmd[@]}"
+}
+
+# 构建应用
+build_app() {
+    local output="$DEFAULT_OUTPUT"
+    local tags=""
+    local cross_platform=""
+    local ldflags="$DEFAULT_LDFLAGS"  # 使用默认值
+    local custom_ldflags=""
+
+    # 解析参数 / Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t) tags="$2"; shift 2 ;;
+            -o) output="$2"; shift 2 ;;
+            --cross) cross_platform="$2"; shift 2 ;;
+            --debug) ldflags=""; shift ;;  # 保留调试信息
+            --ldflags) custom_ldflags="$2"; shift 2 ;;  # 自定义ldflags
+
+            *) shift ;;
+        esac
+    done
+
+     # 如果指定了自定义ldflags，则使用它
+    [[ -n "$custom_ldflags" ]] && ldflags="$custom_ldflags"
+
+    # 创建输出目录
+    mkdir -p "$(dirname "$output")"
+
+    # 构建标签参数
+    local tag_args=()
+    [[ -n "$tags" ]] && tag_args=("-tags" "$tags")
+
+    # 跨平台编译
+    if [[ -n "$cross_platform" ]]; then
+        local os="${cross_platform%/*}"
+        local arch="${cross_platform#*/}"
+        echo "正在跨平台编译: $os/$arch..."
+
+        local build_cmd=("${GO_CMD}" "build")
+        [[ ${#tag_args[@]} -gt 0 ]] && build_cmd+=("${tag_args[@]}")
+        build_cmd+=("-ldflags=$ldflags" "-o" "$output" ".")
+
+    cat <<EOF
+GOOS="$os" GOARCH="$arch" "${build_cmd[@]}"
+EOF
+        GOOS="$os" GOARCH="$arch" "${build_cmd[@]}"
+    else
+        echo "正在编译当前平台..."
+        local build_cmd=("${GO_CMD}" "build")
+        [[ ${#tag_args[@]} -gt 0 ]] && build_cmd+=("${tag_args[@]}")
+        build_cmd+=("-ldflags=$ldflags" "-o" "$output" ".")
+
+    cat <<EOF
+${build_cmd[@]}
+EOF
+        "${build_cmd[@]}"
+    fi
+
+    echo "编译完成: $output"
+}
+
+# 初始化应用
+init_app() {
+    echo "正在初始化应用程序..."
+    ${GO_CMD} run tools/nyxInit.go
+}
+
+# 服务管理
+manage_server() { # {{{
+
+    if [ $# -lt 1 ]; then
+        printf "\033[1;31;33m错误:\033[0m 请输入完整命令: nyx server [start | stop | restart | reload]\n"
+        exit 0
+    fi
+
+    local command="${1}"
+    shift
+
+    case "$command" in
+        start)
+            local app="$DEFAULT_OUTPUT"
+            local conf="$DEFAULT_CONF"
+            local tags=""
+            local debug=false
+            local modes="http"
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -i) app="$2"; shift 2 ;;
+                    -f) conf="$2"; shift 2 ;;
+                    -t) tags="$2"; shift 2 ;;
+                    -d) debug=true; shift ;;
+                    -m) modes="$2"; shift 2 ;;
+                    *) shift ;;
+                esac
+            done
+
+            alive=`ps -ef | grep " $app " | grep -v grep | awk '{print $2}'`
+            if [ "$alive" != "" ]; then
+                echo " 服务已经在运行! name:$app pid:$alive"
+                exit 0
+             fi
+
+            echo "正在启动服务: 模式[$modes], 配置[$conf]"
+            cat <<EOF
+nohup ${app} -f "$conf" -m "$modes" $( $debug && echo "-d" ) 1>>$ROOT_DIR/logs/server.log 2>&1 &
+EOF
+            nohup ${app} -f "$conf" -m "$modes" $( $debug && echo "-d" ) 1>>$ROOT_DIR/logs/server.log 2>&1 &
+
+            wait_for created $app
+
+            if [ 0 != $? ] 
+            then
+                echo 
+                 echo "\033[1;31;33m启动失败\033[0m, 查看日志logs/server.log"
+                 exit 0
+            else
+                echo "服务已启动"
+            fi
+            ;;
+        stop)
+            local app="$DEFAULT_OUTPUT"
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -i) app="$2"; shift 2 ;;
+                    *) shift ;;
+                esac
+            done
+
+            alives=`ps -ef | grep " $app " | grep -v grep | awk '{print $2}'`
+                for alive in $alives
+                do
+                    if [ "$alive" != "" ]; then
+                        echo "正在停止 pid: $alive ..."
+                        kill -9 $alive
+                        if [ 0 != $? ]; then
+                            echo "\033[1;31;33m错误:\033[0m pid: $alive 未成功停止"
+                        fi
+                    fi
+                done
+
+            ;;
+        restart)
+            $0 server stop
+            $0 server start "$@"
+            ;;
+        reload)
+            local app="$DEFAULT_OUTPUT"
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -i) app="$2"; shift 2 ;;
+                    *) shift ;;
+                esac
+            done
+
+            alives=`ps -ef | grep " $app " | grep -v grep | awk '{print $2}'`
+                for alive in $alives
+                do
+                    if [ "$alive" != "" ]; then
+                        echo "正在平滑重启 pid: $alive ..."
+                        kill -HUP $alive
+                        if [ 0 != $? ]; then
+                            echo "\033[1;31;33m错误:\033[0m pid: $alive 重启失败"
+                        fi
+                    fi
+                done
+
+            ;;
+        *)
+            echo "\033[1;31;33m错误:\033[0m 未知命令: $command"
+            show_help
+            exit 0
+            ;;
+    esac
+} # }}}
+
+# 生成代码
+gen_code () {  
+
+    if [ $# -lt 1 ]; then
+        printf '\033[1;31;33m错误:\033[0m 请输入完整命令: nyx gen [ orm |  dao | svc | rpc ]\n'
+        exit 0
+    fi
+
+    local command="${1}"
+    shift
+
+    case "$command" in
+        orm)
+            ${GO_CMD} run tools/genOrm.go "$@"
+
+            ;;
+        dao)
+            . ${TOOLS_DIR}/genDao "$@"
+
+            ;;
+        svc)
+            . ${TOOLS_DIR}/genSvc "$@"
+
+            ;;
+        rpc)
+            . ${TOOLS_DIR}/genRpc "$@"
+
+            ;;
+        *) show_help "\033[1;31;33m错误:\033[0m 未知命令: $1"; exit 0 ;;
+    esac
+} 
+ 
+
+# 主程序
+main() {
+    if [[ $# -eq 0 ]]; then
+        show_help
+        exit 0
+    fi
+
+    case "$1" in
+        run) shift; run_app "$@" ;;
+        build) shift; build_app "$@" ;;
+        init) shift; init_app "$@" ;;
+        server) shift; manage_server "$@" ;;
+        gen) shift; gen_code "$@" ;;
+        -h|--help) show_help ;;
+        *) echo "\033[1;31;33m错误:\033[0m 未知命令: $1"; show_help; exit 0 ;;
+    esac
+}
+
+main "$@"
