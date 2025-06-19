@@ -22,7 +22,7 @@ type SqlClient struct {
 	tx       *sql.Tx
 	executor Executor
 	dbType   string
-	p        *SqlClient //只在事务中打印调式信息时使用(因为在事务中执行explain语句会出现'busy buffer'的错误)
+	p        *SqlClient //实际上没什么用，只在事务中打印调式信息时使用(因为在事务中执行explain语句会出现'busy buffer'的错误)
 	id       string
 }
 
@@ -403,6 +403,21 @@ func (this *SqlClient) execute(sqlstr string, val ...interface{}) (result sql.Re
 } // }}}
 
 func (this *SqlClient) GetOne(table, fields string, options ...FuncSqlOption) (any, error) { // {{{
+	sqlstr, vals := this.prepareSql(table, fields, options)
+	return this.QueryOne(sqlstr, vals...)
+} // }}}
+
+func (this *SqlClient) GetRow(table, fields string, options ...FuncSqlOption) (map[string]any, error) { // {{{
+	sqlstr, vals := this.prepareSql(table, fields, options)
+	return this.QueryRow(sqlstr, vals...)
+} // }}}
+
+func (this *SqlClient) GetAll(table, fields string, options ...FuncSqlOption) ([]map[string]any, error) { //{{{
+	sqlstr, vals := this.prepareSql(table, fields, options)
+	return this.Query(sqlstr, vals...)
+} // }}}
+
+func (this *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
 	var name any
 	var err error
 
@@ -410,8 +425,6 @@ func (this *SqlClient) GetOne(table, fields string, options ...FuncSqlOption) (a
 	if this.Debug {
 		start_time = time.Now()
 	}
-
-	sqlstr, vals := this.prepareSql(table, fields, options)
 
 	err = this.executor.QueryRow(sqlstr, vals...).Scan(&name)
 	if this.Debug {
@@ -429,8 +442,8 @@ func (this *SqlClient) GetOne(table, fields string, options ...FuncSqlOption) (a
 	return name, nil
 } // }}}
 
-func (this *SqlClient) GetRow(table, fields string, options ...FuncSqlOption) (map[string]any, error) { // {{{
-	list, err := this.GetAll(table, fields, options...)
+func (this *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error) { // {{{
+	list, err := this.Query(sqlstr, vals...)
 	if err != nil {
 		return nil, err
 	}
@@ -440,56 +453,6 @@ func (this *SqlClient) GetRow(table, fields string, options ...FuncSqlOption) (m
 	}
 
 	return make(map[string]any, 0), nil
-} // }}}
-
-func (this *SqlClient) GetAll(table, fields string, options ...FuncSqlOption) ([]map[string]any, error) { //{{{
-	sqlstr, vals := this.prepareSql(table, fields, options)
-
-	return this.Query(sqlstr, vals...)
-} // }}}
-
-func (this *SqlClient) prepareSql(table, fields string, options []FuncSqlOption) (string, []any) { //{{{
-	so := &SqlOption{}
-	for _, opt := range options {
-		opt(so)
-	}
-
-	if "" != so.where {
-		so.where = " WHERE " + so.where
-	}
-
-	fidx := ""
-	if "" != so.idx {
-		fidx = " FORCE INDEX (" + so.idx + ") "
-	}
-
-	if "" != so.group {
-		so.where += " GROUP BY " + so.group
-	}
-
-	if "" != so.order {
-		so.where += " ORDER BY " + so.order
-	}
-
-	if "" != so.limits {
-		so.where += " LIMIT " + so.limits
-	}
-
-	if "" != so.leftJoin {
-		so.leftJoin = " LEFT JOIN " + so.leftJoin
-	}
-
-	if "" != so.innerJoin {
-		so.innerJoin = " INNER JOIN " + so.innerJoin
-	}
-
-	if table != "" {
-		table = " FROM " + table
-	}
-
-	sqlstr := "SELECT " + fields + table + fidx + so.leftJoin + so.innerJoin + so.where
-
-	return sqlstr, so.vals
 } // }}}
 
 func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) { //{{{
@@ -555,6 +518,50 @@ func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error
 	}
 
 	return data, nil
+} // }}}
+
+func (this *SqlClient) prepareSql(table, fields string, options []FuncSqlOption) (string, []any) { //{{{
+	so := &SqlOption{}
+	for _, opt := range options {
+		opt(so)
+	}
+
+	if "" != so.where {
+		so.where = " WHERE " + so.where
+	}
+
+	fidx := ""
+	if "" != so.idx {
+		fidx = " FORCE INDEX (" + so.idx + ") "
+	}
+
+	if "" != so.group {
+		so.where += " GROUP BY " + so.group
+	}
+
+	if "" != so.order {
+		so.where += " ORDER BY " + so.order
+	}
+
+	if "" != so.limits {
+		so.where += " LIMIT " + so.limits
+	}
+
+	if "" != so.leftJoin {
+		so.leftJoin = " LEFT JOIN " + so.leftJoin
+	}
+
+	if "" != so.innerJoin {
+		so.innerJoin = " INNER JOIN " + so.innerJoin
+	}
+
+	if table != "" {
+		table = " FROM " + table
+	}
+
+	sqlstr := "SELECT " + fields + table + fidx + so.leftJoin + so.innerJoin + so.where
+
+	return sqlstr, so.vals
 } // }}}
 
 func (this *SqlClient) explain(sqlstr string, val ...any) { //{{{

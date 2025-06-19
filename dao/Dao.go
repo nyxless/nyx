@@ -376,7 +376,17 @@ func (this *Dao) Execute(sql string, params ...any) (int, error) { //{{{
 	return this.DBWriter.Execute(sql, params...)
 } // }}}
 
-// 在从库执行 sql 查询
+// 在从库执行 sql 查询单字段, 返回 any
+func (this *Dao) QueryOne(sql string, params ...any) (any, error) { //{{{
+	return this.GetDBReader().QueryOne(sql, params...)
+} // }}}
+
+// 在从库执行 sql 查询单行, 返回 Map
+func (this *Dao) QueryRow(sql string, params ...any) (map[string]any, error) { //{{{
+	return this.GetDBReader().QueryRow(sql, params...)
+} // }}}
+
+// 在从库执行 sql 查询, 返回 MapSlice
 func (this *Dao) Query(sql string, params ...any) ([]map[string]any, error) { //{{{
 	return this.GetDBReader().Query(sql, params...)
 } // }}}
@@ -502,8 +512,12 @@ func (this *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 		return nil, err
 	}
 
-	f := strings.Fields(field)
-	field = f[len(f)-1]
+	if len(list) > 0 {
+		for k, _ := range list[0] {
+			field = k
+			break
+		}
+	}
 
 	return x.ArrayColumn(list, field), nil
 } // }}}
@@ -519,12 +533,6 @@ func (this *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any
 	if err != nil {
 		return nil, err
 	}
-
-	f := strings.Fields(keyfield)
-	keyfield = f[len(f)-1]
-
-	f = strings.Fields(valfield)
-	valfield = f[len(f)-1]
 
 	return x.ArrayColumnMap(list, valfield, keyfield), nil
 } // }}}

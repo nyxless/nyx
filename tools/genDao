@@ -1,34 +1,27 @@
 #!/bin/bash
+cd `dirname $0`
+
+cd ..
 
 dir=`pwd`
 app=`basename $dir`
-
-if [ "$app" == "tools" ]; then
-    cd ..
-    dir=`pwd`
-    app=`basename $dir`
-fi
 
 function showHelp
 {
     printf "Usage: nyx gen dao <options>\n" 
     printf "Options:
     -f, 强制生成，如果已存在则覆盖
-    -c, 配置文件名, 默认: db_master,db_slave 
     -t, 表名 
     -p, 主键名，默认: id
     -n, 哈希分表数值, 默认: 1\n"
 }
 
-while getopts "fhc:t:p:n:" arg #选项后面的冒号表示该选项需要参数
+while getopts "fht:p:n:" arg #选项后面的冒号表示该选项需要参数
 do
     case $arg in #参数值存在$OPTARG中
         f)  
         is_force=Y
         ;;  
-        c)
-        conf_name=$OPTARG
-        ;;
         t)
         table_name=$OPTARG
         ;; 
@@ -92,7 +85,8 @@ tbl_name=`echo $table_name | tr '[A-Z]' '[a-z]'`
 
 ROOT_DIR=`pwd`
 
-dao_file=$ROOT_DIR/dao/${model_name}Dao.go
+model_dir=$ROOT_DIR/model
+dao_file=$model_dir/dao/DAO$model_name.go
 
 
 function genDao {
@@ -103,16 +97,16 @@ echo "//此文件是由 tools/genDao 自动生成, 可按需要修改" >> $dao_f
 echo "" >> $dao_file
 echo "import (" >> $dao_file
 echo "	\"github.com/nyxless/nyx/x\"" >> $dao_file
-echo "	\"github.com/nyxless/nyx/dao\"" >> $dao_file
+echo "	\"github.com/nyxless/nyx/model/dao\"" >> $dao_file
 echo ")" >> $dao_file
 echo "" >> $dao_file
 if [ "" != "$hash_num" ] && [ $hash_num > 1 ];then
-echo "func New${model_name}Dao(id int, tx ...*x.SqlClient) *${model_name}Dao {" >> $dao_file
+echo "func NewDAO${model_name}(id int, tx ...x.DBClient) *DAO${model_name} {" >> $dao_file
 else
-echo "func New${model_name}Dao(tx ...*x.SqlClient) *${model_name}Dao {" >> $dao_file
+echo "func NewDAO${model_name}(tx ...x.DBClient) *DAO${model_name} {" >> $dao_file
 fi
 
-echo "	ins := &${model_name}Dao{}" >> $dao_file
+echo "	ins := &DAO${model_name}{}" >> $dao_file
 if [ "" != "$hash_num" ] && [ $hash_num > 1 ];then
 echo "	ins.Init(id, tx...)" >> $dao_file
 else
@@ -122,26 +116,20 @@ fi
 echo "	return ins" >> $dao_file
 echo "}" >> $dao_file
 echo "" >> $dao_file
-echo "type ${model_name}Dao struct {" >> $dao_file
-echo "	dao.Dao" >> $dao_file
+echo "type DAO${model_name} struct {" >> $dao_file
+echo "	dao.DAOProxy" >> $dao_file
 echo "}" >> $dao_file
 echo "" >> $dao_file
 
 if [ "" != "$hash_num" ] && [ $hash_num > 1 ];then
-echo "func (this *${model_name}Dao) Init(id int, tx ...*x.SqlClient) {" >> $dao_file
+echo "func (this *DAO${model_name}) Init(id int, tx ...x.DBClient) {" >> $dao_file
 else
-echo "func (this *${model_name}Dao) Init(tx ...*x.SqlClient) {" >> $dao_file
+echo "func (this *DAO${model_name}) Init(tx ...x.DBClient) {" >> $dao_file
 fi
-
-if [ "" != "$conf_name" ]; then
-    conf_name=$(echo "$conf_name" | sed 's/ //' | sed 's/,/","/')
-    conf_name="\"${conf_name}\""
-fi
-
 echo "	if len(tx) > 0 {" >> $dao_file
-echo "		this.Dao.InitTx(tx[0])" >> $dao_file
+echo "		this.DAOProxy.InitTx(tx[0])" >> $dao_file
 echo "	} else {" >> $dao_file
-echo "		this.Dao.Init(${conf_name})" >> $dao_file
+echo "		this.DAOProxy.Init()" >> $dao_file
 echo "	}" >> $dao_file
 
 if [ "" != "$hash_num" ] && [ $hash_num > 1 ];then
@@ -169,7 +157,7 @@ echo "}" >> $dao_file
         fi
 
     else
-        mkdir -p "$ROOT_DIR/dao"
+        mkdir -p "$model_dir/dao"
         genDao
 
         if test -e $dao_file; then

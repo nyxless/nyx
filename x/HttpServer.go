@@ -218,12 +218,12 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 	} else { //根据路径路由: User/GetUserInfo
 		controller_name, action_name, url_values = ParseRoute(r.URL.Path, r.Method)
 
-		if r.Form == nil {
-			r.Form = url.Values{}
-		}
-
-		for k, v := range url_values {
-			r.Form.Set(k, v)
+		if len(url_values) > 0 {
+			new_query := r.URL.Query()
+			for k, v := range url_values {
+				new_query.Add(k, v)
+			}
+			r.URL.RawQuery = new_query.Encode()
 		}
 	}
 
