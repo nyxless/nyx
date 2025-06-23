@@ -134,7 +134,20 @@ func (cv *ConfVal) IntMap(def ...MAPI) MAPI { // {{{
 	return m
 } // }}}
 
-func (cv *ConfVal) Slice(def ...[]string) []string { // {{{
+func (cv *ConfVal) Slice(def ...[]any) []any { // {{{
+	if cv.found {
+		return AsSlice(cv.val)
+	}
+
+	var m []any
+	if len(def) > 0 {
+		m = def[0]
+	}
+
+	return m
+} // }}}
+
+func (cv *ConfVal) StringSlice(def ...[]string) []string { // {{{
 	if cv.found {
 		return AsStringSlice(cv.val)
 	}
@@ -239,8 +252,12 @@ func (this *Config) GetIntMap(keys ...string) MAPI { // {{{
 	return this.Get(keys...).IntMap()
 } // }}}
 
-func (this *Config) GetSlice(keys ...string) []string { // {{{
+func (this *Config) GetSlice(keys ...string) []any { // {{{
 	return this.Get(keys...).Slice()
+} // }}}
+
+func (this *Config) GetStringSlice(keys ...string) []string { // {{{
+	return this.Get(keys...).StringSlice()
 } // }}}
 
 func (this *Config) GetIntSlice(keys ...string) []int { // {{{
@@ -283,8 +300,12 @@ func (this *Config) GetDefIntMap(def MAPI, keys ...string) MAPI { // {{{
 	return this.Get(keys...).IntMap(def)
 } // }}}
 
-func (this *Config) GetDefSlice(def []string, keys ...string) []string { // {{{
+func (this *Config) GetDefSlice(def []any, keys ...string) []any { // {{{
 	return this.Get(keys...).Slice(def)
+} // }}}
+
+func (this *Config) GetDefStringSlice(def []string, keys ...string) []string { // {{{
+	return this.Get(keys...).StringSlice(def)
 } // }}}
 
 func (this *Config) GetDefIntSlice(def []int, keys ...string) []int { // {{{

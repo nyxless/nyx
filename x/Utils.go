@@ -222,7 +222,7 @@ func ArrayColumnMap[T comparable](m []map[string]T, column string, index string)
 	return n
 } //}}}
 
-func JsonEncodeBytes(data any) []byte { // {{{
+func JsonEncodeToBytes(data any) []byte { // {{{
 	content, err := json.MarshalIndent(data, "", "")
 	if err != nil {
 		return nil
@@ -232,7 +232,7 @@ func JsonEncodeBytes(data any) []byte { // {{{
 } // }}}
 
 func JsonEncode(data any) string { // {{{
-	return string(JsonEncodeBytes(data))
+	return string(JsonEncodeToBytes(data))
 } // }}}
 
 func JsonDecode(data any) any { // {{{
@@ -243,6 +243,14 @@ func JsonDecode(data any) any { // {{{
 	}
 
 	return convertFloat(obj)
+} // }}}
+
+func GetJsonEncoder(w io.Writer) json.Encoder { // {{{
+	return json.ConfigDefault.NewEncoder(w)
+} // }}}
+
+func GetJsonDecoder(w io.Reader) json.Decoder { // {{{
+	return json.ConfigDefault.NewDecoder(w)
 } // }}}
 
 // 格式化科学法表示的数字
@@ -306,7 +314,7 @@ func ArrayUnique[T comparable](arr []T) []T { // {{{
 	return narray
 } // }}}
 
-// array string 新增，并去重
+// array 新增，并去重
 func ArrayMerge[T comparable](arr []T, n ...[]T) []T { // {{{
 	for _, v := range n {
 		arr = append(arr, v...)
@@ -315,7 +323,7 @@ func ArrayMerge[T comparable](arr []T, n ...[]T) []T { // {{{
 	return ArrayUnique(arr)
 } // }}}
 
-// array string 删除
+// array 删除
 func ArrayRem[T comparable](arr []T, n T) []T { // {{{
 	narr := []T{}
 	for _, v := range arr {
@@ -1242,14 +1250,80 @@ func AsStringSlice(v any) (strs []string) { // {{{
 	return
 } // }}}
 
-// 将[]T 转换为[]any
-func AsSlice[T any](arr []T) []any { // {{{
-	narr := []any{}
-	for _, v := range arr {
-		narr = append(narr, v)
+func AsSlice(v any) []any { // {{{
+	if v == nil {
+		return nil
 	}
 
-	return narr
+	var arr []any
+	switch val := v.(type) {
+	case []any:
+		return val
+	case []string:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case [][]byte:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []int:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []int8:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []int16:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []int32:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []int64:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []uint:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []uint8:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []uint16:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []uint32:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []uint64:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []float32:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []float64:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+	case []bool:
+		for _, i := range val {
+			arr = append(arr, i)
+		}
+
+	default:
+	}
+
+	return nil
 } // }}}
 
 // []int, []string, []interface, 连接成字符串

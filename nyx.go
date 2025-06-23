@@ -125,7 +125,7 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_access_log_enabled = x.Conf.GetDefBool(true, "access_log", "enabled")
 	x.Conf_access_log_success_level_name = x.Conf.GetString("access_log", "success_level_name")
 	x.Conf_access_log_error_level_name = x.Conf.GetString("access_log", "error_level_name")
-	x.Conf_access_log_omit_params = x.Conf.GetSlice("access_log", "omit_params")
+	x.Conf_access_log_omit_params = x.Conf.GetStringSlice("access_log", "omit_params")
 	x.Conf_template_enabled = x.Conf.GetBool("template", "enabled")
 	x.Conf_max_post_size = int64(x.Conf.GetDefInt(32, "max_post_size") << 20)
 	x.Conf_rpc_auth = x.Conf.GetStringMap("rpc_auth")
@@ -485,7 +485,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 	}
 
 	//是否监听status
-	run_moniter := true
+	run_moniter := x.Conf.GetDefBool(false, "monitor_enable")
 
 	var wg sync.WaitGroup
 	for _, mode := range modes { // {{{

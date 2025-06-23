@@ -7,6 +7,7 @@ import (
 var (
 	//多语言时指定默认语言
 	DEFAULT_LANG = "CN"
+
 	//成功
 	ERR_SUC = &Error{0, "OK"}
 

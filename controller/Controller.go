@@ -32,22 +32,22 @@ const (
 )
 
 type Controller struct {
-	W             http.ResponseWriter
-	R             *http.Request
-	RBody         []byte
-	IR            *iRequest
-	Ctx           context.Context
-	startTime     time.Time
-	Mode          int
-	rpcInHeaders  metadata.MD
-	rpcOutHeaders x.MAPS
-	rpcContent    x.MAP
-	Controller    string
-	Action        string
-	logParams     x.MAP    //需要额外记录在日志中的参数
-	logOmitParams []string //不希望记录在日志中的参数
-	Tpl           *x.Template
-	maxPostSize   int64 //post 表单大小
+	W              http.ResponseWriter
+	R              *http.Request
+	RBody          []byte
+	IR             *iRequest
+	Ctx            context.Context
+	startTime      time.Time
+	Mode           int
+	rpcInHeaders   metadata.MD
+	rpcOutHeaders  x.MAPS
+	rpcContent     x.MAP
+	ControllerName string
+	ActionName     string
+	logParams      x.MAP    //需要额外记录在日志中的参数
+	logOmitParams  []string //不希望记录在日志中的参数
+	Tpl            *x.Template
+	maxPostSize    int64 //post 表单大小
 }
 
 // 默认的初始化方法，可通过在项目中重写此方法实现公共入口方法
@@ -105,8 +105,8 @@ func (c *Controller) PrepareCli(params url.Values, controller, action string) { 
 func (c *Controller) prepare(ctx context.Context, mode int, controller, action string) { // {{{
 	c.startTime = time.Now()
 	c.Mode = mode
-	c.Controller = controller
-	c.Action = action
+	c.ControllerName = controller
+	c.ActionName = action
 	c.Ctx = ctx
 } // }}}
 
@@ -437,7 +437,7 @@ func (c *Controller) GetRequestUri() string { // {{{
 	}
 
 	if RPC_MODE == c.Mode && nil != c.IR {
-		return x.Concat(c.Controller, "/", c.Action)
+		return x.Concat(c.ControllerName, "/", c.ActionName)
 	}
 
 	return ""
@@ -549,7 +549,7 @@ func (c *Controller) GetErrorResponse(err any) (int, string, x.MAP) { // {{{
 		fmt.Println(errmsg)
 		os.Stderr.Write(debug_trace)
 
-		if x.Conf_env_mode != "DEV" {
+		if x.Conf_env_mode != "dev" {
 			lang := c.GetString("lang")
 			errmsg = x.ERR_SYSTEM.GetMessage(lang)
 		}
@@ -579,7 +579,7 @@ func (c *Controller) RenderJson(res any) { // {{{
 		c.W.Header().Set("Content-Type", "application/json;charset=UTF-8")
 	}
 
-	c.render(x.JsonEncodeBytes(res))
+	c.render(x.JsonEncodeToBytes(res))
 } // }}}
 
 // 输出文本
@@ -599,7 +599,7 @@ func (c *Controller) RenderHtml(files ...string) { // {{{
 		file = files[0]
 	}
 
-	uri := c.Controller + "_" + c.Action
+	uri := c.ControllerName + "_" + c.ActionName
 
 	if "" == file {
 		file = uri + x.TemplateSuffix
@@ -614,6 +614,17 @@ func (c *Controller) RenderHtml(files ...string) { // {{{
 
 	if nil != err {
 		fmt.Println(err)
+	}
+} // }}}
+
+// 输出HTTP流
+func (c *Controller) RenderStream(data []byte) { // {{{
+	if nil != c.W {
+		c.W.Write(data)
+	}
+
+	if flusher, ok := c.W.(http.Flusher); ok {
+		flusher.Flush()
 	}
 } // }}}
 

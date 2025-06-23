@@ -287,7 +287,7 @@ func (this *rpcHandler) buildReply(res map[string]interface{}) *pb.Reply { // {{
 					switch typ {
 					case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
 						types[i] = "JSON"
-						values[i] = JsonEncodeBytes(v)
+						values[i] = JsonEncodeToBytes(v)
 					default:
 						values[i] = AsBytes(v)
 					}

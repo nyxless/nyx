@@ -24,7 +24,7 @@ var (
 	defaultApis               = [][]any{}
 	defaultRouteApiFuncs      = map[string]map[string]RouteApiFunc{}
 	defaultHttpMaxHeaderBytes = 0 //0时, 将使用默认配置DefaultMaxHeaderBytes(1M)
-	//routGroups                = map[string]int{}
+	routGroups                = map[string]int{}
 )
 
 var (
@@ -317,7 +317,7 @@ func (this *httpHandler) addController(c interface{}, group ...string) { // {{{
 	ct := reflect.Indirect(reflectVal).Type()
 	controller_name := strings.TrimSuffix(ct.Name(), CONTROLLER_SUFFIX)
 	if len(group) > 0 && group[0] != "" {
-		//routGroups[group[0]] = 1
+		routGroups[group[0]] = 1
 		controller_name = strings.Trim(group[0], " \r\t\v/") + "/" + controller_name
 	}
 

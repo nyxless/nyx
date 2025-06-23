@@ -9,7 +9,7 @@ import (
 
 // 解析 uri 得到 controller action params
 func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
-	var controller_name, action_name string
+	var group, controller_name, action_name string
 
 	url_values := MAPS{}
 
@@ -73,22 +73,33 @@ func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
 		}
 
 		//未匹配到路由配置，解析URI
-		if path_num > 0 { //一层: 匹配controller
-			controller_name = path[0]
+		for i := 0; i < path_num; i++ {
 
-			if path_num > 1 { //二层: 匹配controller/action
-				action_name = path[1]
+			if group != "" {
+				group += "/" + path[i]
+			} else {
+				group = path[i]
 			}
 
-			if path_num > 2 { //多层: 匹配[group/]controller/action
-				action_name = path[path_num-1]
-				controller_name = strings.Join(path[:path_num-1], "/")
+			if controller_name != "" {
+				action_name = path[i]
+			} else {
+				controller_name = group
+			}
+
+			if _, ok := routGroups[group]; ok {
+				controller_name = ""
+				action_name = ""
 			}
 		}
 	} // }}}
 
 	if "" == controller_name {
-		controller_name = Conf_default_controller
+		if group != "" {
+			controller_name = group + "/" + Conf_default_controller
+		} else {
+			controller_name = Conf_default_controller
+		}
 	}
 
 	if "" == action_name {
