@@ -403,11 +403,13 @@ func (this *SqlClient) execute(sqlstr string, val ...interface{}) (result sql.Re
 } // }}}
 
 func (this *SqlClient) GetOne(table, fields string, options ...FuncSqlOption) (any, error) { // {{{
+	options = append(options, WithLimits("1"))
 	sqlstr, vals := this.prepareSql(table, fields, options)
 	return this.QueryOne(sqlstr, vals...)
 } // }}}
 
 func (this *SqlClient) GetRow(table, fields string, options ...FuncSqlOption) (map[string]any, error) { // {{{
+	options = append(options, WithLimits("1"))
 	sqlstr, vals := this.prepareSql(table, fields, options)
 	return this.QueryRow(sqlstr, vals...)
 } // }}}
