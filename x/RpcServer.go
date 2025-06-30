@@ -24,6 +24,8 @@ var (
 	defaultGrpcServerOptions = []grpc.ServerOption{}
 )
 
+//type Stream = pb.NYXRpc_CallStreamServer
+
 // 添加rpc 方法对应的controller实例, 支持分组
 func AddRpc(c any, groups ...string) { // {{{
 	group := ""
@@ -118,7 +120,7 @@ type rpcHandler struct { // {{{
 func (this *rpcHandler) Call(ctx context.Context, in *pb.Request) (*pb.Reply, error) { // {{{
 	method := in.Method
 
-	params := map[string]interface{}{}
+	params := map[string]any{}
 	for k, v := range in.Keys {
 		if in.Types[k] == "BYTES" {
 			params[v] = in.Values[k]
@@ -131,7 +133,22 @@ func (this *rpcHandler) Call(ctx context.Context, in *pb.Request) (*pb.Reply, er
 
 	return this.buildReply(res), nil
 } // }}}
+/*
+	func (s *server) CallStream(req *pb.Request, stream pb.NYXRpc_CallStreamServer) error {
+		log.Printf("Received CallStream request: %v", req.GetMessage())
 
+		// 发送多个响应
+		for i := 0; i < 5; i++ {
+			if err := stream.Send(&pb.Reply{
+				Message: fmt.Sprintf("Stream response %d to: %s", i+1, req.GetMessage()),
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+*/
 func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx context.Context) (res map[string]any) { // {{{
 	defer func() {
 		if err := recover(); err != nil {
@@ -149,7 +166,7 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 				errmsg = fmt.Sprint(errinfo)
 			}
 
-			res = map[string]interface{}{
+			res = map[string]any{
 				"code": ERR_SYSTEM.GetCode(),
 				"msg":  errmsg,
 			}
@@ -267,35 +284,34 @@ func (this *rpcHandler) addController(c any, group ...string) { // {{{
 
 } // }}}
 
-func (this *rpcHandler) buildReply(res map[string]interface{}) *pb.Reply { // {{{
+func (this *rpcHandler) buildReply(res map[string]any) *pb.Reply { // {{{
 	var reply_data *pb.ReplyData
 	keys := map[int32]string{}
 	types := map[int32]string{}
 	values := map[int32][]byte{}
 
-	if data, ok := res["data"].(map[string]interface{}); ok {
+	if data, ok := res["data"].(map[string]any); ok {
 		var i int32
 		for k, v := range data {
 			keys[i] = k
-			if v != nil {
-				if val, ok := v.([]byte); ok {
-					types[i] = "BYTES"
-					values[i] = val
-				} else {
-					typ := reflect.TypeOf(v).Kind()
-
-					switch typ {
-					case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
-						types[i] = "JSON"
-						values[i] = JsonEncodeToBytes(v)
-					default:
-						values[i] = AsBytes(v)
-					}
-				}
+			switch val := v.(type) {
+			case nil:
+				types[i] = "STRING"
+				values[i] = []byte("")
+			case []byte:
+				types[i] = "BYTES"
+				values[i] = val
+			case string:
+				types[i] = "STRING"
+				values[i] = []byte(val)
+			default:
+				types[i] = "JSON"
+				values[i] = JsonEncodeToBytes(v)
 			}
 
 			i++
 		}
+
 		reply_data = &pb.ReplyData{Keys: keys, Types: types, Values: values}
 	}
 

@@ -128,7 +128,9 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_access_log_omit_params = x.Conf.GetStringSlice("access_log", "omit_params")
 	x.Conf_template_enabled = x.Conf.GetBool("template", "enabled")
 	x.Conf_max_post_size = int64(x.Conf.GetDefInt(32, "max_post_size") << 20)
-	x.Conf_rpc_auth = x.Conf.GetStringMap("rpc_auth")
+	x.Conf_access_auth = x.Conf.GetStringMap("access_auth")
+	x.Conf_api_auth_check = x.Conf.GetDefBool(false, "api_auth_check")
+	x.Conf_rpc_auth_check = x.Conf.GetDefBool(true, "rpc_auth_check")
 	x.Conf_default_controller = x.Conf.GetDefString("index", "default_controller")
 	x.Conf_default_action = x.Conf.GetDefString("index", "default_action")
 
@@ -500,7 +502,8 @@ func (this *Nyx) run(modes ...string) { // {{{
 				x.NewHttpServer(
 					x.Conf.GetString("http_addr"),
 					x.Conf.GetDefInt(80, "http_port"),
-					x.Conf.GetInt("http_timeout"),
+					x.Conf.GetDefInt(60000, "http_read_timeout"),
+					x.Conf.GetDefInt(60000, "http_write_timeout"),
 					use_graceful,
 					x.Conf.GetBool("pprof_enable"),
 					x.Conf.GetBool("static_enable"),

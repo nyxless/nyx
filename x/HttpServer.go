@@ -65,7 +65,7 @@ func SetHttpMaxHeaderBytes(m int) { // {{{
 	}
 } // }}}
 
-func NewHttpServer(addr string, port, timeout int, useGraceful, enable_pprof, enable_static bool, static_path, static_root string) *HttpServer { // {{{
+func NewHttpServer(addr string, port, rtimeout, wtimeout int, useGraceful, enable_pprof, enable_static bool, static_path, static_root string) *HttpServer { // {{{
 	if "" != static_root && !filepath.IsAbs(static_root) {
 		static_root = filepath.Join(AppRoot, static_root)
 	}
@@ -73,7 +73,8 @@ func NewHttpServer(addr string, port, timeout int, useGraceful, enable_pprof, en
 	server := &HttpServer{
 		addr:           addr,
 		port:           port,
-		timeout:        timeout,
+		rtimeout:       rtimeout,
+		wtimeout:       wtimeout,
 		useGraceful:    useGraceful,
 		maxHeaderBytes: defaultHttpMaxHeaderBytes,
 		handler: &httpHandler{
@@ -97,7 +98,8 @@ func NewHttpServer(addr string, port, timeout int, useGraceful, enable_pprof, en
 type HttpServer struct {
 	addr           string
 	port           int
-	timeout        int
+	rtimeout       int
+	wtimeout       int
 	useGraceful    bool
 	maxHeaderBytes int
 	handler        *httpHandler
@@ -117,8 +119,8 @@ func (this *HttpServer) Run() {
 
 	Println("HttpServer Listen", addr)
 
-	rtimeout := time.Duration(this.timeout) * time.Millisecond
-	wtimeout := time.Duration(this.timeout) * time.Millisecond
+	rtimeout := time.Duration(this.rtimeout) * time.Millisecond
+	wtimeout := time.Duration(this.wtimeout) * time.Millisecond
 
 	//使用endless, 支持graceful reload
 	if this.useGraceful {

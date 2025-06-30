@@ -412,6 +412,10 @@ func Concat(str ...string) string { // {{{
 	return builder.String()
 } // }}}
 
+func NowTime() time.Time { // {{{
+	return time.Now()
+} // }}}
+
 // unix时间戳
 func Now() int { // {{{
 	return int(time.Now().Unix())

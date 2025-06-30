@@ -392,9 +392,9 @@ func (this *Dao) Query(sql string, params ...any) ([]map[string]any, error) { //
 } // }}}
 
 // 返回迭代器
-//func (this *Dao) QueryStream(sql string, params ...any) (*db.RowIterator, error) { //{{{
-//	return this.GetDBReader().QueryStream(sql, params...)
-//} // }}}
+func (this *Dao) QueryStream(sql string, params ...any) (*db.RowIterator, error) { //{{{
+	return this.GetDBReader().QueryStream(sql, params...)
+} // }}}
 
 // 插入新记录
 func (this *Dao) AddRecord(vals ...map[string]any) (int, error) { //{{{

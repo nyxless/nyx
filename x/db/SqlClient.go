@@ -458,6 +458,21 @@ func (this *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, err
 } // }}}
 
 func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) { //{{{
+	iter, err := this.QueryStream(sqlstr, val...)
+	if err != nil {
+		return nil, errorHandle(err)
+	}
+
+	data, err := iter.Collect()
+	if err != nil {
+		return nil, errorHandle(err)
+	}
+
+	return data, nil
+} // }}}
+
+// 返回迭代器
+func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIterator, error) { //{{{
 	//分析sql,如果使用了select SQL_CALC_FOUND_ROWS, 分析语句会干扰结果，所以放在真正查询的前面
 	if this.Debug {
 		this.explain(sqlstr, val...)
@@ -468,7 +483,6 @@ func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error
 		start_time = time.Now()
 	}
 
-	var rows *sql.Rows
 	rows, err := this.executor.Query(sqlstr, val...)
 
 	if this.Debug {
@@ -479,47 +493,7 @@ func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error
 		return nil, errorHandle(err)
 	}
 
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, errorHandle(err)
-	}
-
-	values := make([]any, len(cols))
-	scanArgs := make([]any, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
-	}
-
-	var data []map[string]any
-	var j = 0
-	for rows.Next() {
-		err = rows.Scan(scanArgs...)
-		if err != nil {
-			return nil, errorHandle(err)
-		}
-
-		row := map[string]any{}
-		for i, col := range values {
-			if col == nil {
-				row[cols[i]] = ""
-			} else if colval, ok := col.(sql.RawBytes); ok {
-				row[cols[i]] = string(colval)
-			} else {
-				row[cols[i]] = col
-			}
-		}
-
-		data = append(data, row)
-		j++
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, errorHandle(err)
-	}
-
-	return data, nil
+	return newRowIterator(rows)
 } // }}}
 
 func (this *SqlClient) prepareSql(table, fields string, options []FuncSqlOption) (string, []any) { //{{{

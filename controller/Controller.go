@@ -53,6 +53,11 @@ type Controller struct {
 // 默认的初始化方法，可通过在项目中重写此方法实现公共入口方法
 func (c *Controller) Init() {}
 
+func (c *Controller) CheckAuth() { // {{{
+	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	x.Interceptor(x.CheckToken(token), x.ERR_AUTH)
+} // }}}
+
 func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller, action string) { // {{{
 	c.W = w
 	c.R = r
@@ -73,7 +78,14 @@ func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller,
 	// guid 用于日志追踪，可由客户端生成, 依次检查: 请求参数 -> header -> 生成
 	guid := c.GetString("guid", c.GetHeader("guid", x.RandStr(32)))
 
-	c.Ctx = context.WithValue(c.Ctx, "guid", guid)
+	c.SetCtx("guid", guid)
+	c.SetCtx("controller", c.ControllerName)
+	c.SetCtx("action", c.ActionName)
+
+	//api 接口鉴权
+	if x.Conf_api_auth_check {
+		c.CheckAuth()
+	}
 } // }}}
 
 func (c *Controller) getRequestBody(r *http.Request) ([]byte, error) { // {{{
@@ -91,10 +103,9 @@ func (c *Controller) PrepareRpc(params x.MAP, ctx context.Context, controller, a
 	c.prepare(ctx, RPC_MODE, controller, action)
 
 	//rpc 接口鉴权
-	appid := c.GetHeader("appid")
-	secret := c.GetHeader("secret")
-
-	x.Interceptor(secret == x.Conf_rpc_auth[appid], x.ERR_RPCAUTH, appid)
+	if x.Conf_rpc_auth_check {
+		c.CheckAuth()
+	}
 } // }}}
 
 func (c *Controller) PrepareCli(params url.Values, controller, action string) { // {{{
@@ -451,6 +462,14 @@ func (c *Controller) GetUA() string { // {{{
 	return ""
 } // }}}
 
+func (c *Controller) GetCtx(key string, defaultValues ...string) any { // {{{
+	return c.Ctx.Value(key)
+} // }}}
+
+func (c *Controller) SetCtx(key, value any) { // {{{
+	c.Ctx = context.WithValue(c.Ctx, key, value)
+} // }}}
+
 // lifetime<0时删除cookie
 // options: domain,secure,httponly,path
 func (c *Controller) SetCookie(key, val string, lifetime int, options ...any) { // {{{
@@ -618,14 +637,30 @@ func (c *Controller) RenderHtml(files ...string) { // {{{
 } // }}}
 
 // 输出HTTP流
-func (c *Controller) RenderStream(data []byte) { // {{{
-	if nil != c.W {
-		c.W.Write(data)
+func (c *Controller) RenderStream(data []byte) error { // {{{
+	select {
+	case <-c.R.Context().Done():
+		// 客户端断开连接
+		return fmt.Errorf("Client has terminated the request!")
+	default:
+		// 继续处理
 	}
 
-	if flusher, ok := c.W.(http.Flusher); ok {
-		flusher.Flush()
+	if c.W != nil && data != nil {
+		_, err := c.W.Write(data)
+		if err != nil {
+			return err
+		}
 	}
+
+	flusher, ok := c.W.(http.Flusher)
+	if !ok {
+		http.Error(c.W, "Streaming unsupported", http.StatusInternalServerError)
+	}
+
+	flusher.Flush()
+
+	return nil
 } // }}}
 
 // 重定向URL
