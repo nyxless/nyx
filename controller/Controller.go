@@ -55,7 +55,10 @@ func (c *Controller) Init() {}
 
 func (c *Controller) CheckAuth() { // {{{
 	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	x.Interceptor(x.CheckToken(token), x.ERR_AUTH)
+	appid, ok := x.CheckToken(token)
+	x.Interceptor(ok, x.ERR_AUTH)
+
+	c.SetCtx("appid", appid)
 } // }}}
 
 func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller, action string) { // {{{

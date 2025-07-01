@@ -128,11 +128,17 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_access_log_omit_params = x.Conf.GetStringSlice("access_log", "omit_params")
 	x.Conf_template_enabled = x.Conf.GetBool("template", "enabled")
 	x.Conf_max_post_size = int64(x.Conf.GetDefInt(32, "max_post_size") << 20)
-	x.Conf_access_auth = x.Conf.GetStringMap("access_auth")
 	x.Conf_api_auth_check = x.Conf.GetDefBool(false, "api_auth_check")
 	x.Conf_rpc_auth_check = x.Conf.GetDefBool(true, "rpc_auth_check")
 	x.Conf_default_controller = x.Conf.GetDefString("index", "default_controller")
 	x.Conf_default_action = x.Conf.GetDefString("index", "default_action")
+
+	x.Conf_access_auth_app = x.Conf.GetMapsSlice("access_auth_app")
+	x.ConfAccessAuthApp = map[string]string{}
+
+	for _, v := range x.Conf_access_auth_app {
+		x.ConfAccessAuthApp[v["appid"]] = v["secret"]
+	}
 
 	this.parseRouter()
 } // }}}

@@ -28,29 +28,34 @@ func GenToken(appid, secret string, is_rpc bool, ts ...int) string { // {{{
 	}
 
 	s := AsString(t)
-	return MD5(appid+secret+s) + "." + rpc + "." + appid + "." + s
+	return MD5(appid+secret+s) + "." + appid + "." + s + "." + rpc
 } // }}}
 
-func CheckToken(token string) bool { // {{{
+func CheckToken(token string) (string, bool) { // {{{
 	tks := strings.SplitN(token, ".", 4)
-	if len(tks) < 4 {
-		return false
+	if len(tks) < 3 { //允许省略最后的rpc标识部分
+		return "", false
 	}
 
-	rpc := tks[1]
-	appid := tks[2]
-	t := tks[3]
+	appid := tks[1]
+	t := tks[2]
+	rpc := "0"
+	if len(tks) > 3 {
+		rpc = tks[3]
+	} else {
+		token += ".0"
+	}
 
-	secret, ok := Conf_access_auth[appid]
+	secret, ok := ConfAccessAuthApp[appid]
 	if !ok {
-		return false
+		return appid, false
 	}
 
 	is_rpc := rpc == "1"
 
 	ti := AsInt(t)
 	if GenToken(appid, secret, is_rpc, ti) != token {
-		return false
+		return appid, false
 	}
 
 	ttl := 0
@@ -61,8 +66,8 @@ func CheckToken(token string) bool { // {{{
 	}
 
 	if ttl > 0 {
-		return Now()-ti < ttl
+		return appid, Now()-ti < ttl
 	}
 
-	return true
+	return appid, true
 } // }}}
