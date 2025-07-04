@@ -46,7 +46,7 @@ func CheckToken(token string) (string, bool) { // {{{
 		token += ".0"
 	}
 
-	secret, ok := ConfAccessAuthApp[appid]
+	secret, ok := ConfAuthApp[appid]
 	if !ok {
 		return appid, false
 	}
@@ -60,9 +60,9 @@ func CheckToken(token string) (string, bool) { // {{{
 
 	ttl := 0
 	if is_rpc {
-		ttl = Conf_rpc_auth_ttl
+		ttl = Conf_auth_rpc_check_ttl
 	} else {
-		ttl = Conf_api_auth_ttl
+		ttl = Conf_auth_api_check_ttl
 	}
 
 	if ttl > 0 {

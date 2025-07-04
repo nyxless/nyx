@@ -86,7 +86,7 @@ func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller,
 	c.SetCtx("action", c.ActionName)
 
 	//api 接口鉴权
-	if x.Conf_api_auth_check {
+	if x.Conf_auth_api_check_enabled {
 		c.CheckAuth()
 	}
 } // }}}
@@ -106,7 +106,7 @@ func (c *Controller) PrepareRpc(params x.MAP, ctx context.Context, controller, a
 	c.prepare(ctx, RPC_MODE, controller, action)
 
 	//rpc 接口鉴权
-	if x.Conf_rpc_auth_check {
+	if x.Conf_auth_rpc_check_enabled {
 		c.CheckAuth()
 	}
 } // }}}

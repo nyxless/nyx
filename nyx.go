@@ -121,6 +121,9 @@ func (this *Nyx) envInit() { // {{{
 
 // 缓存配置文件变量
 func (this *Nyx) cacheConf() { // {{{
+	x.Conf_default_controller = x.Conf.GetDefString("index", "default_controller")
+	x.Conf_default_action = x.Conf.GetDefString("index", "default_action")
+
 	x.Conf_env_mode = x.Conf.GetString("env_mode")
 	x.Conf_access_log_enabled = x.Conf.GetDefBool(true, "access_log", "enabled")
 	x.Conf_access_log_success_level_name = x.Conf.GetString("access_log", "success_level_name")
@@ -128,16 +131,41 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_access_log_omit_params = x.Conf.GetStringSlice("access_log", "omit_params")
 	x.Conf_template_enabled = x.Conf.GetBool("template", "enabled")
 	x.Conf_max_post_size = int64(x.Conf.GetDefInt(32, "max_post_size") << 20)
-	x.Conf_api_auth_check = x.Conf.GetDefBool(false, "api_auth_check")
-	x.Conf_rpc_auth_check = x.Conf.GetDefBool(true, "rpc_auth_check")
-	x.Conf_default_controller = x.Conf.GetDefString("index", "default_controller")
-	x.Conf_default_action = x.Conf.GetDefString("index", "default_action")
 
-	x.Conf_access_auth_app = x.Conf.GetMapsSlice("access_auth_app")
-	x.ConfAccessAuthApp = map[string]string{}
+	x.Conf_auth_api_check_enabled = x.Conf.GetDefBool(false, "auth", "api_check", "enabled")
+	x.Conf_auth_rpc_check_enabled = x.Conf.GetDefBool(true, "auth", "rpc_check", "enabled")
+	x.Conf_auth_api_check_ttl = x.Conf.GetDefInt(3600, "auth", "api_check", "ttl")
+	x.Conf_auth_rpc_check_ttl = x.Conf.GetDefInt(3600, "auth", "rpc_check", "ttl")
+	x.Conf_auth_api_check_method = x.Conf.GetStringSlice("auth", "api_check", "method")
+	x.Conf_auth_api_check_except = x.Conf.GetStringSlice("auth", "api_check", "except")
+	x.Conf_auth_rpc_check_method = x.Conf.GetStringSlice("auth", "rpc_check", "method")
+	x.Conf_auth_rpc_check_except = x.Conf.GetStringSlice("auth", "rpc_check", "except")
+	x.Conf_auth_app = x.Conf.GetMapsSlice("auth", "app")
 
-	for _, v := range x.Conf_access_auth_app {
-		x.ConfAccessAuthApp[v["appid"]] = v["secret"]
+	x.ConfAuthApiCheckMethod = map[string]struct{}{}
+	x.ConfAuthApiCheckExcept = map[string]struct{}{}
+	x.ConfAuthRpcCheckMethod = map[string]struct{}{}
+	x.ConfAuthRpcCheckExcept = map[string]struct{}{}
+	x.ConfAuthApp = map[string]string{}
+
+	for _, v := range x.Conf_auth_api_check_method {
+		x.ConfAuthApiCheckMethod[v] = struct{}{}
+	}
+
+	for _, v := range x.Conf_auth_api_check_except {
+		x.ConfAuthApiCheckExcept[v] = struct{}{}
+	}
+
+	for _, v := range x.Conf_auth_rpc_check_method {
+		x.ConfAuthRpcCheckMethod[v] = struct{}{}
+	}
+
+	for _, v := range x.Conf_auth_rpc_check_except {
+		x.ConfAuthRpcCheckExcept[v] = struct{}{}
+	}
+
+	for _, v := range x.Conf_auth_app {
+		x.ConfAuthApp[v["appid"]] = v["secret"]
 	}
 
 	this.parseRouter()

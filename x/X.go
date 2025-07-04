@@ -39,16 +39,25 @@ var (
 	Conf_access_log_success_level_name string
 	Conf_access_log_error_level_name   string
 	Conf_access_log_omit_params        []string
-	Conf_access_auth_app               []map[string]string
-	Conf_api_auth_check                bool
-	Conf_rpc_auth_check                bool
-	Conf_api_auth_ttl                  int
-	Conf_rpc_auth_ttl                  int
 	Conf_default_controller            string
 	Conf_default_action                string
 
-	//Conf_access_auth变形map[appid]secret
-	ConfAccessAuthApp map[string]string
+	Conf_auth_api_check_enabled bool
+	Conf_auth_rpc_check_enabled bool
+	Conf_auth_api_check_ttl     int
+	Conf_auth_rpc_check_ttl     int
+	Conf_auth_api_check_method  []string
+	Conf_auth_api_check_except  []string
+	Conf_auth_rpc_check_method  []string
+	Conf_auth_rpc_check_except  []string
+	Conf_auth_app               []map[string]string
+
+	//Conf_auth_app变形map[appid]secret
+	ConfAuthApp            map[string]string
+	ConfAuthApiCheckMethod map[string]struct{}
+	ConfAuthApiCheckExcept map[string]struct{}
+	ConfAuthRpcCheckMethod map[string]struct{}
+	ConfAuthRpcCheckExcept map[string]struct{}
 
 	//由路由配置衍生的map
 	/*
