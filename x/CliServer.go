@@ -88,6 +88,11 @@ func (this *CliServer) serveCli() {
 	controller_name := uri[:idx]
 	action_name := uri[idx+1:]
 
+	var group string
+	if idx = strings.LastIndex(controller_name, "/"); idx > 0 {
+		group = controller_name[:idx]
+	}
+
 	canhandler := false
 	var controllerType reflect.Type
 	if controller_name != "" && action_name != "" {
@@ -122,10 +127,11 @@ func (this *CliServer) serveCli() {
 		}
 	}
 
-	in = make([]reflect.Value, 3)
+	in = make([]reflect.Value, 4)
 	in[0] = reflect.ValueOf(m)
 	in[1] = reflect.ValueOf(controller_name)
 	in[2] = reflect.ValueOf(action_name)
+	in[3] = reflect.ValueOf(group)
 	method = vc.Method(this.methodMap[controller_name]["PrepareCli"])
 	method.Call(in)
 

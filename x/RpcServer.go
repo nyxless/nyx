@@ -192,6 +192,11 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 		}
 	}
 
+	var group string
+	if idx = strings.LastIndex(controller_name, "/"); idx > 0 {
+		group = controller_name[:idx]
+	}
+
 	canhandler := false
 	var controllerType reflect.Type
 	if controller_name != "" && action_name != "" {
@@ -221,11 +226,12 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 		}
 	}()
 
-	in = make([]reflect.Value, 4)
+	in = make([]reflect.Value, 5)
 	in[0] = reflect.ValueOf(params)
 	in[1] = reflect.ValueOf(ctx)
 	in[2] = reflect.ValueOf(controller_name)
 	in[3] = reflect.ValueOf(action_name)
+	in[4] = reflect.ValueOf(group)
 	method = vc.Method(this.methodMap[controller_name]["PrepareRpc"])
 	method.Call(in)
 

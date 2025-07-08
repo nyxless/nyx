@@ -16,6 +16,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1561,6 +1562,16 @@ func GreenString(s string) string {
 func YellowString(s string) string {
 	return Concat("\033[33m", s, "\033[0m")
 }
+
+// 打印内存使用情况
+func PrintMemUsage() { // {{{
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	fmt.Printf("Alloc = %v MiB", m.Alloc/1024/1024)
+	fmt.Printf("\tTotalAlloc = %v MiB", m.TotalAlloc/1024/1024)
+	fmt.Printf("\tSys = %v MiB", m.Sys/1024/1024)
+	fmt.Printf("\tNumGC = %v\n", m.NumGC)
+} // }}}
 
 // 便于调式时直接使用
 func Println(s ...any) { // {{{

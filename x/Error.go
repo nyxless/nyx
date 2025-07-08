@@ -13,7 +13,7 @@ var (
 
 	//系统错误码
 	ERR_SYSTEM         = &Error{10, MAPS{"CN": "系统错误", "EN": "system error"}}
-	ERR_AUTH           = &Error{11, MAPS{"CN": "认证失败:%+v", "EN": "request unauthorized"}}
+	ERR_AUTH           = &Error{11, MAPS{"CN": "认证失败", "EN": "request unauthorized"}}
 	ERR_METHOD_INVALID = &Error{12, MAPS{"CN": "请求不合法: %+v", "EN": "invalid request: %+v"}}
 	ERR_FREQ           = &Error{13, MAPS{"CN": "接口访问过于频繁: %+v", "EN": "request is too frequently: %+v"}}
 	ERR_PARAMS         = &Error{14, MAPS{"CN": "参数错误: %+v", "EN": "invalid param: %+v"}}

@@ -121,8 +121,8 @@ func (this *Nyx) envInit() { // {{{
 
 // 缓存配置文件变量
 func (this *Nyx) cacheConf() { // {{{
-	x.Conf_default_controller = x.Conf.GetDefString("index", "default_controller")
-	x.Conf_default_action = x.Conf.GetDefString("index", "default_action")
+	x.Conf_default_controller = strings.ToLower(x.Conf.GetDefString("index", "default_controller"))
+	x.Conf_default_action = strings.ToLower(x.Conf.GetDefString("index", "default_action"))
 
 	x.Conf_env_mode = x.Conf.GetString("env_mode")
 	x.Conf_access_log_enabled = x.Conf.GetDefBool(true, "access_log", "enabled")
@@ -149,19 +149,19 @@ func (this *Nyx) cacheConf() { // {{{
 	x.ConfAuthApp = map[string]string{}
 
 	for _, v := range x.Conf_auth_api_check_method {
-		x.ConfAuthApiCheckMethod[v] = struct{}{}
+		x.ConfAuthApiCheckMethod[strings.ToLower(v)] = struct{}{}
 	}
 
 	for _, v := range x.Conf_auth_api_check_except {
-		x.ConfAuthApiCheckExcept[v] = struct{}{}
+		x.ConfAuthApiCheckExcept[strings.ToLower(v)] = struct{}{}
 	}
 
 	for _, v := range x.Conf_auth_rpc_check_method {
-		x.ConfAuthRpcCheckMethod[v] = struct{}{}
+		x.ConfAuthRpcCheckMethod[strings.ToLower(v)] = struct{}{}
 	}
 
 	for _, v := range x.Conf_auth_rpc_check_except {
-		x.ConfAuthRpcCheckExcept[v] = struct{}{}
+		x.ConfAuthRpcCheckExcept[strings.ToLower(v)] = struct{}{}
 	}
 
 	for _, v := range x.Conf_auth_app {
@@ -245,23 +245,11 @@ func (this *Nyx) parseRouter() { // {{{
 				panic("路由配置有误: path_rule")
 			}
 
-			var controller, action string
+			var group, controller, action string
 			handler := strings.Trim(x.AsString(path_rule["to"]), " \r\t\v/")
 			if handler != "" {
-				handlers := strings.Split(handler, "/")
-				handler_num := len(handlers)
-				if handler_num > 0 { //一层: 匹配controller
-					controller = strings.ToLower(handlers[0])
-
-					if handler_num > 1 { //二层: 匹配controller/action
-						action = strings.ToLower(handlers[1])
-					}
-
-					if handler_num > 2 { //多层: 匹配[group/]controller/action
-						action = strings.ToLower(handlers[handler_num-1])
-						controller = strings.ToLower(strings.Join(handlers[:handler_num-1], "/"))
-					}
-				}
+				handler = strings.ToLower(handler)
+				group, controller, action = x.ParseUri(handler)
 			}
 
 			path := strings.Trim(x.AsString(path_rule["from"]), " \r\t\v/")
@@ -272,6 +260,9 @@ func (this *Nyx) parseRouter() { // {{{
 			if prefix != "" {
 				path = x.Concat(prefix, "/", path)
 			}
+
+			//转换为小写(路由路径不区分大小写)
+			path = strings.ToLower(path)
 
 			path_num := strings.Count(path, "/") + 1
 			var params []string
@@ -306,6 +297,7 @@ func (this *Nyx) parseRouter() { // {{{
 				}
 
 				url_param_routes[path_num][len(params)][path] = map[string]any{
+					"group":      group,
 					"controller": controller,
 					"action":     action,
 					"method":     methods,
@@ -313,6 +305,7 @@ func (this *Nyx) parseRouter() { // {{{
 				}
 			} else {
 				url_routes[path] = map[string]any{
+					"group":      group,
 					"controller": controller,
 					"action":     action,
 					"method":     methods,

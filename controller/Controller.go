@@ -42,6 +42,7 @@ type Controller struct {
 	rpcInHeaders   metadata.MD
 	rpcOutHeaders  x.MAPS
 	rpcContent     x.MAP
+	Group          string
 	ControllerName string
 	ActionName     string
 	logParams      x.MAP    //需要额外记录在日志中的参数
@@ -54,14 +55,62 @@ type Controller struct {
 func (c *Controller) Init() {}
 
 func (c *Controller) CheckAuth() { // {{{
-	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	var checkMethod map[string]struct{}
+	var checkExcept map[string]struct{}
+
+	if c.Mode == HTTP_MODE {
+		if !x.Conf_auth_api_check_enabled {
+			return
+		}
+
+		checkMethod = x.ConfAuthApiCheckMethod
+		checkExcept = x.ConfAuthApiCheckExcept
+	} else if c.Mode == RPC_MODE {
+		if !x.Conf_auth_rpc_check_enabled {
+			return
+		}
+
+		checkMethod = x.ConfAuthRpcCheckMethod
+		checkExcept = x.ConfAuthRpcCheckExcept
+	} else {
+		return
+	}
+
+	if len(checkMethod) > 0 {
+		_, exists := checkMethod[c.Group]
+		if !exists {
+			_, exists = checkMethod[c.ControllerName]
+			if !exists {
+				_, exists = checkMethod[c.ControllerName+"/"+c.ActionName]
+				if !exists {
+					return
+				}
+			}
+		}
+	}
+
+	if len(checkExcept) > 0 {
+		if _, exists := checkExcept[c.Group]; exists {
+			return
+		}
+
+		if _, exists := checkExcept[c.ControllerName]; exists {
+			return
+		}
+
+		if _, exists := checkExcept[c.ControllerName+"/"+c.ActionName]; exists {
+			return
+		}
+	}
+
+	token := strings.TrimPrefix(c.GetHeader("authorization"), "Bearer ")
 	appid, ok := x.CheckToken(token)
 	x.Interceptor(ok, x.ERR_AUTH)
 
 	c.SetCtx("appid", appid)
 } // }}}
 
-func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller, action string) { // {{{
+func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller, action, group string) { // {{{
 	c.W = w
 	c.R = r
 
@@ -76,19 +125,7 @@ func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller,
 	r.ParseMultipartForm(c.maxPostSize)
 
 	c.IR = &iRequest{Form: r.Form}
-	c.prepare(context.Background(), HTTP_MODE, controller, action)
-
-	// guid 用于日志追踪，可由客户端生成, 依次检查: 请求参数 -> header -> 生成
-	guid := c.GetString("guid", c.GetHeader("guid", x.RandStr(32)))
-
-	c.SetCtx("guid", guid)
-	c.SetCtx("controller", c.ControllerName)
-	c.SetCtx("action", c.ActionName)
-
-	//api 接口鉴权
-	if x.Conf_auth_api_check_enabled {
-		c.CheckAuth()
-	}
+	c.prepare(context.Background(), HTTP_MODE, controller, action, group)
 } // }}}
 
 func (c *Controller) getRequestBody(r *http.Request) ([]byte, error) { // {{{
@@ -101,27 +138,35 @@ func (c *Controller) getRequestBody(r *http.Request) ([]byte, error) { // {{{
 	return buf, nil
 } // }}}
 
-func (c *Controller) PrepareRpc(params x.MAP, ctx context.Context, controller, action string) { // {{{
+func (c *Controller) PrepareRpc(params x.MAP, ctx context.Context, controller, action, group string) { // {{{
 	c.IR = &iRequest{RpcForm: params}
-	c.prepare(ctx, RPC_MODE, controller, action)
-
-	//rpc 接口鉴权
-	if x.Conf_auth_rpc_check_enabled {
-		c.CheckAuth()
-	}
+	c.prepare(ctx, RPC_MODE, controller, action, group)
 } // }}}
 
-func (c *Controller) PrepareCli(params url.Values, controller, action string) { // {{{
+func (c *Controller) PrepareCli(params url.Values, controller, action, group string) { // {{{
 	c.IR = &iRequest{Form: params}
-	c.prepare(context.Background(), CLI_MODE, controller, action)
+	c.prepare(context.Background(), CLI_MODE, controller, action, group)
 } // }}}
 
-func (c *Controller) prepare(ctx context.Context, mode int, controller, action string) { // {{{
+func (c *Controller) prepare(ctx context.Context, mode int, controller, action, group string) { // {{{
 	c.startTime = time.Now()
 	c.Mode = mode
+	c.Group = group
 	c.ControllerName = controller
 	c.ActionName = action
 	c.Ctx = ctx
+
+	// guid 用于日志追踪，可由客户端生成, 依次检查: 请求参数 -> header -> 生成
+	guid := c.GetString("guid", c.GetHeader("guid", x.RandStr(32)))
+
+	c.SetCtx("guid", guid)
+	c.SetCtx("group", c.Group)
+	c.SetCtx("controller", c.ControllerName)
+	c.SetCtx("action", c.ActionName)
+
+	c.SetHeader("guid", guid)
+
+	c.CheckAuth()
 } // }}}
 
 // 以下 GetX 方法用于获取参数
@@ -490,6 +535,7 @@ func (c *Controller) SetHeader(key, val string) { // {{{
 	}
 } // }}}
 
+// http mode 使用
 func (c *Controller) SetHeaders(headers http.Header) { // {{{
 	c_header := c.W.Header()
 	for k, v := range headers {

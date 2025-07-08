@@ -205,7 +205,7 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 		}
 	}
 
-	var controller_name, action_name string
+	var group, controller_name, action_name string
 	var url_values MAPS
 
 	if this.enablePprof && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
@@ -218,7 +218,7 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 		this.monitorStatus(rw, r)
 		return
 	} else { //根据路径路由: User/GetUserInfo
-		controller_name, action_name, url_values = ParseRoute(r.URL.Path, r.Method)
+		group, controller_name, action_name, url_values = ParseRoute(r.URL.Path, r.Method)
 
 		if len(url_values) > 0 {
 			new_query := r.URL.Query()
@@ -264,11 +264,12 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 		}
 	}()
 
-	in = make([]reflect.Value, 4)
+	in = make([]reflect.Value, 5)
 	in[0] = reflect.ValueOf(rw)
 	in[1] = reflect.ValueOf(r)
 	in[2] = reflect.ValueOf(controller_name)
 	in[3] = reflect.ValueOf(action_name)
+	in[4] = reflect.ValueOf(group)
 	method = vc.Method(this.methodMap[controller_name]["Prepare"])
 	method.Call(in)
 

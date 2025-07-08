@@ -8,24 +8,24 @@ import (
 )
 
 // 解析 uri 得到 controller action params
-func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
-	var group, controller_name, action_name string
-
-	url_values := MAPS{}
-
+func ParseRoute(uri, method string) (group, controller_name, action_name string, url_values MAPS) { // {{{
+	url_values = MAPS{}
 	uri = strings.Trim(uri, " \r\t\v/")
 
 	if "" != uri { // {{{
+		//全部转换为小写
+		low_uri := strings.ToLower(uri)
+
 		//先匹配不带参数路由规则
-		if rule, ok := UrlRoutes[uri]; ok {
+		if rule, ok := UrlRoutes[low_uri]; ok {
 			if mtd, ok := rule["method"].(map[string]string); ok {
 				if _, ok = mtd[method]; ok || len(mtd) == 0 {
-					return rule["controller"].(string), rule["action"].(string), url_values
+					return rule["group"].(string), rule["controller"].(string), rule["action"].(string), url_values
 				}
 			}
 		}
 
-		path := strings.Split(uri, "/")
+		path := strings.Split(low_uri, "/")
 		path_num := len(path)
 
 		//根据path层数匹配带参数路由规则
@@ -38,12 +38,13 @@ func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
 						if _, ok = mtd[method]; ok || len(mtd) == 0 {
 							//处理参数
 							if params, ok := rule["params"].([]string); ok {
+								ori_path := strings.Split(uri, "/")
 								for i := 0; i < param_num; i++ {
-									url_values[params[i]] = path[path_num-(i+1)]
+									url_values[params[i]] = ori_path[path_num-(i+1)]
 								}
 							}
 
-							return AsString(rule["controller"]), AsString(rule["action"]), url_values
+							return AsString(rule["group"]), AsString(rule["controller"]), AsString(rule["action"]), url_values
 						}
 					}
 				}
@@ -54,45 +55,63 @@ func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
 			prefix_from := prefix_rule["from"]
 			prefix_to := prefix_rule["to"]
 
-			if prefix_from != "" && strings.HasPrefix(uri, prefix_from) {
-				uri = strings.Replace(uri, prefix_from, prefix_to, 1)
-				uri = strings.Trim(uri, " \r\t\v/")
-				path = strings.Split(uri, "/")
-				path_num = len(path)
-
-				break
+			if prefix_from != "" && strings.HasPrefix(low_uri, prefix_from) {
+				low_uri = strings.Replace(low_uri, prefix_from, prefix_to, 1)
+				group, controller_name, action_name = ParseUri(low_uri)
+				return
 			}
 
 			if prefix_from == "" && prefix_to != "" {
-				uri = Concat(prefix_to, "/", uri)
-				path = strings.Split(uri, "/")
-				path_num = len(path)
-
-				break
+				low_uri = Concat(prefix_to, "/", low_uri)
+				group, controller_name, action_name = ParseUri(low_uri)
+				return
 			}
 		}
 
-		//未匹配到路由配置，解析URI
-		for i := 0; i < path_num; i++ {
-
-			if group != "" {
-				group += "/" + path[i]
-			} else {
-				group = path[i]
-			}
-
-			if controller_name != "" {
-				action_name = path[i]
-			} else {
-				controller_name = group
-			}
-
-			if _, ok := routGroups[group]; ok {
-				controller_name = ""
-				action_name = ""
-			}
-		}
+		group, controller_name, action_name = parsePath(path)
 	} // }}}
+
+	if "" == controller_name {
+		controller_name = Conf_default_controller
+	}
+
+	if "" == action_name {
+		action_name = Conf_default_action
+	}
+
+	return
+} // }}}
+
+func ParseUri(uri string) (group, controller_name, action_name string) { // {{{
+	uri = strings.Trim(uri, " \r\t\v/")
+	path := strings.Split(uri, "/")
+
+	return parsePath(path)
+}
+
+func parsePath(path []string) (group, controller_name, action_name string) { // {{{
+	var current_path string
+
+	for i := 0; i < len(path); i++ {
+
+		if current_path != "" {
+			current_path += "/" + path[i]
+		} else {
+			current_path = path[i]
+		}
+
+		if controller_name != "" {
+			action_name = path[i]
+		} else {
+			controller_name = current_path
+		}
+
+		if _, ok := routGroups[current_path]; ok {
+			group = current_path
+			controller_name = ""
+			action_name = ""
+		}
+	}
 
 	if "" == controller_name {
 		if group != "" {
@@ -106,7 +125,7 @@ func ParseRoute(uri, method string) (string, string, MAPS) { // {{{
 		action_name = Conf_default_action
 	}
 
-	return strings.ToLower(controller_name), strings.ToLower(action_name), url_values
+	return
 } // }}}
 
 // 获取本机ip
