@@ -7,6 +7,7 @@ import (
 	"github.com/nyxless/nyx/x/db"
 	"strings"
 	"sync"
+	"time"
 	// 新增 driver 在项目中使用 RegisterSqlDriver 注册
 	//	_ "github.com/mattn/go-sqlite3"
 	//	_ "github.com/ClickHouse/clickhouse-go/v2"
@@ -48,28 +49,36 @@ var dsnFuncs = map[string]SqlDsn{
 	},
 }
 
-func (this *DBProxy) Get(conf MAP) *db.SqlClient { // {{{
+func (this *DBProxy) Get(conf MAP) (*db.SqlClient, error) { // {{{
+	var err error
+	var c *db.SqlClient
+
+	host, ok := conf["host"]
+	if !ok {
+		return nil, fmt.Errorf("DB 配置有误")
+	}
+
 	this.mutex.RLock()
-	v, ok := this.c[AsString(conf["host"])]
+	c, ok = this.c[AsString(host)]
 	this.mutex.RUnlock()
 
-	if ok && v.Ping() != nil {
-		v.Close()
+	if ok && c.Ping() != nil {
+		c.Close()
 		ok = false
 	}
 
 	if !ok {
-		v = this.add(conf)
+		c, err = this.add(conf)
 	}
 
-	return v
+	return c, err
 } // }}}
 
-func (this *DBProxy) add(conf MAP) *db.SqlClient { // {{{
+func (this *DBProxy) add(conf MAP) (*db.SqlClient, error) { // {{{
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	var sqlClient *db.SqlClient
+	var c *db.SqlClient
 	var err error
 	var debug bool
 	var dsn string
@@ -82,19 +91,21 @@ func (this *DBProxy) add(conf MAP) *db.SqlClient { // {{{
 
 	max_open_conns := AsInt(conf["max_open_conns"])
 	max_idle_conns := AsInt(conf["max_idle_conns"])
+	conn_max_idle_time := AsInt(conf["conn_max_idle_time"])
+	conn_max_lifetime := AsInt(conf["conn_max_lifetime"])
 
 	dbt := strings.ToLower(AsString(conf["type"]))
 
 	if dsnfunc, ok := dsnFuncs[dbt]; ok {
 		dsn = dsnfunc(conf)
 	} else {
-		panic("不支持的db类型:" + dbt)
+		return nil, fmt.Errorf("不支持的db类型: %s", dbt)
 	}
 
 	var _db *sql.DB
 	_db, err = sql.Open(dbt, dsn)
 	if err != nil {
-		panic(fmt.Sprintf("%s connect error: %v", dbt, err))
+		return nil, fmt.Errorf("%s connect error: %v", dbt, err)
 	}
 
 	if max_open_conns > 0 {
@@ -105,15 +116,29 @@ func (this *DBProxy) add(conf MAP) *db.SqlClient { // {{{
 		_db.SetMaxIdleConns(max_idle_conns)
 	}
 
-	sqlClient = newDBFunc()
-	sqlClient.SetDB(dbt, _db)
-	sqlClient.SetDebug(debug)
+	if conn_max_idle_time > 0 {
+		_db.SetConnMaxIdleTime(time.Duration(conn_max_idle_time) * time.Second)
+	}
 
-	this.c[AsString(conf["host"])] = sqlClient
+	if conn_max_lifetime > 0 {
+		_db.SetConnMaxLifetime(time.Duration(conn_max_lifetime) * time.Second)
+	}
 
-	Printf("add dbproxy: host [ %s ], type [ %s ] db [ %s ], #ID [ %s ]\n", conf["host"], dbt, conf["database"], sqlClient.ID())
+	c = newDBFunc()
+	c.SetDB(dbt, _db)
+	c.SetDebug(debug)
 
-	return sqlClient
+	// 测试连接
+	err = c.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("无法连接到 DB: [%v] %v", conf["host"], err)
+	}
+
+	this.c[AsString(conf["host"])] = c
+
+	Printf("add dbproxy: host [ %s ], type [ %s ] db [ %s ], #ID [ %s ]\n", conf["host"], dbt, conf["database"], c.ID())
+
+	return c, nil
 } // }}}
 
 // 拼装参数时，作为可执行字符，而不是字符串值

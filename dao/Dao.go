@@ -1,10 +1,13 @@
 package dao
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"github.com/nyxless/nyx/x"
 	"github.com/nyxless/nyx/x/db"
+	"strconv"
 	"strings"
 )
 
@@ -27,6 +30,8 @@ type Dao struct {
 	alias              string //表别名
 	leftJoin           []*JoinOn
 	innerJoin          []*JoinOn
+	useCache           bool //使用缓存
+	cacheTtl           int  //缓存时长，单位秒
 }
 
 type JoinOn struct {
@@ -80,7 +85,7 @@ func (this *Dao) Init(conf_name ...string) { //{{{
 	slave_confs := x.Conf.GetMapSlice(slave_conf_name)
 
 	if len(slave_confs) > 0 {
-		idx := x.Intn(len(slave_confs))
+		idx := x.RandIntn(len(slave_confs))
 		slave_conf = slave_confs[idx]
 	}
 
@@ -88,10 +93,21 @@ func (this *Dao) Init(conf_name ...string) { //{{{
 		fmt.Printf("从库资源不存在[ %s ], 使用主库 [ %s ]\n", slave_conf_name, master_conf_name)
 	}
 
+	var err error
+
 	this.defaultFields = "*"
 	this.filterValues = []any{}
-	this.DBWriter = x.DB.Get(master_conf)
-	this.DBReader = x.DB.Get(slave_conf)
+
+	this.DBWriter, err = x.DB.Get(master_conf)
+	if err != nil {
+		panic(err)
+	}
+
+	this.DBReader, err = x.DB.Get(slave_conf)
+	if err != nil {
+		panic(err)
+	}
+
 	if this.DBWriter.Type() == "mysql" {
 		this.autoOrder = true
 	}
@@ -183,6 +199,23 @@ func (this *Dao) UseMaster(flag ...bool) *Dao { // {{{
 
 	this.forceMaster = use
 	return this
+} // }}}
+
+func (this *Dao) WithCache(ttl int) *Dao { // {{{
+	this.useCache = true
+	this.cacheTtl = ttl
+
+	return this
+} // }}}
+
+func (this *Dao) getUseCache() (bool, int) { // {{{
+	use_cache := this.useCache
+	ttl := this.cacheTtl
+
+	this.useCache = false
+	this.cacheTtl = 0
+
+	return use_cache, ttl
 } // }}}
 
 func (this *Dao) SetAutoOrder(flag ...bool) *Dao { // {{{
@@ -420,20 +453,38 @@ func (this *Dao) ResetRecord(vals map[string]any) (int, error) { //{{{
 // 按主键查询记录
 func (this *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 	alias := this.getAlias()
-	table := this.table
 	primary := this.primary
+	join_table := this.table
 
 	if alias != "" {
-		table = table + " " + alias
 		primary = alias + "." + primary
-	} else {
-		alias = table
+		join_table = alias
 	}
 
-	left_join := parseJoinOn(alias, this.leftJoin)
-	inner_join := parseJoinOn(alias, this.innerJoin)
+	left_join := parseJoinOn(join_table, this.leftJoin)
+	inner_join := parseJoinOn(join_table, this.innerJoin)
 
-	return this.GetDBReader().GetRow(table, this.GetFields(), db.WithLeftJoin(left_join), db.WithInnerJoin(inner_join), db.WithWhere(primary+"=?", id))
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(this.GetFields()),
+		db.WithAlias(alias),
+		db.WithLeftJoin(left_join),
+		db.WithInnerJoin(inner_join),
+		db.WithWhere(primary+"=?", []any{id}),
+	}
+
+	_, res, err := this.getCache(func() (int, any, error) {
+
+		row, err := this.GetDBReader().GetRow(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, row, err
+
+	}, sqlOptions)
+
+	return res.(map[string]any), err
 } // }}}
 
 func parseJoinOn(alias string, joinons []*JoinOn) string { // {{{
@@ -487,12 +538,22 @@ func (this *Dao) DelRecords(params ...any) (int, error) { //{{{
 
 func (this *Dao) GetOne(field string, params ...any) (any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
-	order := this.getOrder(false)
 
-	return this.GetDBReader().GetOne(this.table, field, db.WithIdx(idx), db.WithGroup(group), db.WithOrder(order), db.WithWhere(where, values...))
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(field),
+		db.WithIdx(this.getIndex()),
+		db.WithGroup(this.getGroup()),
+		db.WithOrder(this.getOrder(false)),
+		db.WithWhere(this.getFilter()),
+	}
+
+	_, res, err := this.getCache(func() (int, any, error) {
+		res, err := this.GetDBReader().GetOne(sqlOptions...)
+		return 0, res, err
+	}, sqlOptions)
+
+	return res, err
 } // }}}
 
 // alias for GetOne
@@ -502,53 +563,89 @@ func (this *Dao) GetValue(field string, params ...any) (any, error) { //{{{
 
 func (this *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
-	order := this.getOrder(false)
 
-	list, err := this.GetDBReader().GetAll(this.table, field, db.WithIdx(idx), db.WithGroup(group), db.WithOrder(order), db.WithWhere(where, values...))
-	if err != nil {
-		return nil, err
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(field),
+		db.WithIdx(this.getIndex()),
+		db.WithGroup(this.getGroup()),
+		db.WithOrder(this.getOrder(false)),
+		db.WithWhere(this.getFilter()),
 	}
 
-	if len(list) > 0 {
-		for k, _ := range list[0] {
-			field = k
-			break
+	_, res, err := this.getCache(func() (int, any, error) {
+
+		list, err := this.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
 		}
-	}
 
-	return x.ArrayColumn(list, field), nil
+		if len(list) > 0 {
+			for k, _ := range list[0] {
+				field = k
+				break
+			}
+		}
+
+		return 0, x.ArrayColumn(list, field), nil
+
+	}, sqlOptions)
+
+	return res.([]any), err
 } // }}}
 
 func (this *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
-	order := this.getOrder(false)
 
-	list, err := this.GetDBReader().GetAll(this.table, keyfield+","+valfield, db.WithIdx(idx), db.WithGroup(group), db.WithOrder(order), db.WithWhere(where, values...))
-	if err != nil {
-		return nil, err
+	field := keyfield + "," + valfield
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(field),
+		db.WithIdx(this.getIndex()),
+		db.WithGroup(this.getGroup()),
+		db.WithOrder(this.getOrder(false)),
+		db.WithWhere(this.getFilter()),
 	}
 
-	return x.ArrayColumnMap(list, valfield, keyfield), nil
+	_, res, err := this.getCache(func() (int, any, error) {
+
+		list, err := this.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, x.ArrayColumnMap(list, valfield, keyfield), nil
+
+	}, sqlOptions)
+
+	return res.(map[any]any), err
 } // }}}
 
 func (this *Dao) GetCount(params ...any) (int, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
 
-	count, err := this.GetDBReader().GetOne(this.table, "count("+this.GetCountField()+") as total", db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values...))
-	if err != nil {
-		return 0, err
+	field := "count(" + this.GetCountField() + ") as total"
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(field),
+		db.WithIdx(this.getIndex()),
+		db.WithGroup(this.getGroup()),
+		db.WithWhere(this.getFilter()),
 	}
 
-	return x.AsInt(count), nil
+	num, _, err := this.getCache(func() (int, any, error) {
+
+		count, err := this.GetDBReader().GetOne(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+		return x.AsInt(count), nil, nil
+
+	}, sqlOptions)
+
+	return num, err
 } // }}}
 
 func (this *Dao) Exists(id any) (bool, error) { //{{{
@@ -571,142 +668,235 @@ func (this *Dao) ExistsBy(params ...any) (bool, error) { //{{{
 
 func (this *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
 
 	alias := this.getAlias()
-	table := this.table
+	join_table := this.table
 
 	if alias != "" {
-		table = table + " " + alias
-	} else {
-		alias = table
+		join_table = alias
 	}
 
-	left_join := parseJoinOn(alias, this.leftJoin)
-	inner_join := parseJoinOn(alias, this.innerJoin)
+	left_join := parseJoinOn(join_table, this.leftJoin)
+	inner_join := parseJoinOn(join_table, this.innerJoin)
 
-	row, err := this.GetDBReader().GetRow(table, this.GetFields(), db.WithLeftJoin(left_join), db.WithInnerJoin(inner_join), db.WithWhere(where, values...))
-	if err != nil {
-		return nil, err
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(this.GetFields()),
+		db.WithAlias(alias),
+		db.WithLeftJoin(left_join),
+		db.WithInnerJoin(inner_join),
+		db.WithWhere(this.getFilter()),
 	}
 
-	return row, err
+	_, res, err := this.getCache(func() (int, any, error) {
+
+		row, err := this.GetDBReader().GetRow(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, row, err
+
+	}, sqlOptions)
+
+	return res.(map[string]any), err
+
 } // }}}
 
 func (this *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
-	order := this.getOrder(true)
-	limits := this.getLimit()
 
 	alias := this.getAlias()
-	table := this.table
+	join_table := this.table
 
 	if alias != "" {
-		table = table + " " + alias
-	} else {
-		alias = table
+		join_table = alias
 	}
 
-	left_join := parseJoinOn(alias, this.leftJoin)
-	inner_join := parseJoinOn(alias, this.innerJoin)
+	left_join := parseJoinOn(join_table, this.leftJoin)
+	inner_join := parseJoinOn(join_table, this.innerJoin)
 
-	list, err := this.GetDBReader().GetAll(table, this.GetFields(),
-		db.WithIdx(idx),
-		db.WithGroup(group),
-		db.WithOrder(order),
-		db.WithLimits(limits),
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(this.GetFields()),
+		db.WithAlias(alias),
+		db.WithIdx(this.getIndex()),
+		db.WithGroup(this.getGroup()),
+		db.WithOrder(this.getOrder(true)),
+		db.WithLimits(this.getLimit()),
 		db.WithLeftJoin(left_join),
 		db.WithInnerJoin(inner_join),
-		db.WithWhere(where, values...))
-	if err != nil {
-		return nil, err
+		db.WithWhere(this.getFilter()),
 	}
 
-	return list, nil
-} // }}}
+	_, res, err := this.getCache(func() (int, any, error) {
 
-//func (this *Dao) GetStream(params ...any) (*db.RowIterator, error) {
-//}
+		res, err := this.GetDBReader().GetAll(sqlOptions...)
+		return 0, res, err
+
+	}, sqlOptions)
+
+	return res.([]map[string]any), err
+} // }}}
 
 // 查询列表 + 总数
 // *mysql 支持 FOUND_ROWS(), 大数据下可能会有性能问题，请谨慎使用
 // *由于每次查询都是从连接池中获取连接(底层实现)，所以开启只读事务，以保证FOUND_ROWS()的两条sql使用同一连接
 func (this *Dao) GetList(params ...any) (int, []map[string]any, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	idx := this.getIndex()
-	group := this.getGroup()
-	order := this.getOrder(true)
-	limits := this.getLimit()
 
 	alias := this.getAlias()
-	table := this.table
+	join_table := this.table
 
 	if alias != "" {
-		table = table + " " + alias
-	} else {
-		alias = table
+		join_table = alias
 	}
 
-	left_join := parseJoinOn(alias, this.leftJoin)
-	inner_join := parseJoinOn(alias, this.innerJoin)
+	left_join := parseJoinOn(join_table, this.leftJoin)
+	inner_join := parseJoinOn(join_table, this.innerJoin)
 
-	var count any
-	var list []map[string]any
-	var err error
+	field := this.GetFields()
+
 	db_reader := this.GetDBReader()
 	if db_reader.Type() == "mysql" {
-		reader, err := db_reader.Begin(true)
-		if err != nil {
-			return 0, nil, err
-		}
-
-		defer reader.Rollback()
-
-		list, err = reader.GetAll(table, "SQL_CALC_FOUND_ROWS "+this.GetFields(),
-			db.WithIdx(idx),
-			db.WithGroup(group),
-			db.WithOrder(order),
-			db.WithLimits(limits),
-			db.WithLeftJoin(left_join),
-			db.WithInnerJoin(inner_join),
-			db.WithWhere(where, values...))
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		count, err = reader.GetOne("", "FOUND_ROWS() as total")
-		if err != nil {
-			return 0, nil, err
-		}
-
-		err = reader.Commit()
-		if err != nil {
-			return 0, nil, err
-		}
-	} else {
-		list, err = db_reader.GetAll(table, this.GetFields(),
-			db.WithIdx(idx),
-			db.WithGroup(group),
-			db.WithOrder(order),
-			db.WithLimits(limits),
-			db.WithLeftJoin(left_join),
-			db.WithInnerJoin(inner_join),
-			db.WithWhere(where, values...))
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		count, err = db_reader.GetOne(this.table, "count(1) as total", db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values...))
-		if err != nil {
-			return 0, nil, err
-		}
+		field = "SQL_CALC_FOUND_ROWS " + field
 	}
 
-	return x.AsInt(count), list, nil
+	idx := this.getIndex()
+	group := this.getGroup()
+	where, values := this.getFilter()
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithFields(field),
+		db.WithAlias(alias),
+		db.WithIdx(idx),
+		db.WithGroup(group),
+		db.WithOrder(this.getOrder(true)),
+		db.WithLimits(this.getLimit()),
+		db.WithLeftJoin(left_join),
+		db.WithInnerJoin(inner_join),
+		db.WithWhere(where, values),
+	}
+
+	num, res, err := this.getCache(func() (int, any, error) {
+
+		var count any
+		var list []map[string]any
+		var err error
+
+		if db_reader.Type() == "mysql" {
+			reader, err := db_reader.Begin(true)
+			if err != nil {
+				return 0, nil, err
+			}
+
+			defer reader.Rollback()
+
+			list, err = reader.GetAll(sqlOptions...)
+
+			if err != nil {
+				return 0, nil, err
+			}
+
+			count, err = reader.GetOne(db.WithFields("FOUND_ROWS() as total"))
+			if err != nil {
+				return 0, nil, err
+			}
+
+			err = reader.Commit()
+			if err != nil {
+				return 0, nil, err
+			}
+		} else {
+			list, err = db_reader.GetAll(sqlOptions...)
+
+			if err != nil {
+				return 0, nil, err
+			}
+
+			count, err = db_reader.GetOne(db.WithTable(this.table), db.WithFields("count(1) as total"), db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values))
+			if err != nil {
+				return 0, nil, err
+			}
+		}
+
+		return x.AsInt(count), list, nil
+
+	}, sqlOptions)
+
+	return num, res.([]map[string]any), err
+
 } // }}}
+
+func (this *Dao) getCache(fn func() (int, any, error), opts []db.FnSqlOption) (num int, res any, err error) { //{{{
+	var found bool
+
+	use_cache, ttl := this.getUseCache()
+
+	if use_cache && x.LocalCache != nil {
+		key := this.getCacheKey(opts)
+		num, res, found = this.getFromCache(key)
+		if !found {
+			num, res, err = fn()
+			if err == nil {
+				this.setCache(key, num, res, ttl)
+			}
+		}
+	} else {
+		num, res, err = fn()
+	}
+
+	return num, res, err
+} // }}}
+
+func (this *Dao) getFromCache(key []byte) (int, any, bool) { // {{{
+	got, err := x.LocalCache.Get(key)
+	if err != nil {
+		return 0, nil, false
+	}
+
+	var cache_data *cacheData
+	decoder := gob.NewDecoder(bytes.NewReader(got))
+	err = decoder.Decode(&cache_data)
+	if err != nil {
+		return 0, nil, false
+	}
+
+	return cache_data.num, cache_data.res, true
+} // }}}
+
+func (this *Dao) setCache(key []byte, num int, res any, ttl int) error { // {{{
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(&cacheData{num, res})
+	if err != nil {
+		return err
+	}
+
+	encodedData := buf.Bytes()
+
+	return x.LocalCache.Set(key, encodedData, ttl)
+} // }}}
+
+func (this *Dao) getCacheKey(opts []db.FnSqlOption) []byte { // {{{
+	so := &db.SqlOption{}
+	for _, opt := range opts {
+		opt(so)
+	}
+	sql, vals := so.ToSql()
+
+	var sb strings.Builder
+	sb.WriteString(sql)
+	for _, v := range vals {
+		sb.WriteString(" ")
+		sb.WriteString(x.AsString(v))
+	}
+
+	return []byte(strconv.Itoa(int(x.Hash(sb.String()))))
+} // }}}
+
+type cacheData struct {
+	num int
+	res any
+}

@@ -12,37 +12,45 @@ type TextEncoder struct{}
 func (t *TextEncoder) Encode(entry *Entry) ([]byte, error) {
 	var b bytes.Buffer
 
-	msg := entry.Msg
-	fields := []byte{}
-	if entry.Formated {
-		msg = fmt.Sprintf(msg, entry.Args)
-	} else {
-		for _, arg := range entry.Args {
-			switch v := arg.(type) {
-			case string:
-				msg += v
-			case map[string]any:
-				fields = append(fields, t.parseMap(v)...)
-			case Field:
-				fields = append(fields, t.parseField(v)...)
-			default:
-				msg += fmt.Sprint(v)
-			}
-		}
+	if entry.Level != "" {
+		b.WriteString(entry.Level)
+		b.WriteString("\t")
 	}
 
-	b.WriteString(entry.Level)
-	b.WriteString("\t")
-	b.WriteString(entry.Time.Format(time.RFC3339))
+	b.WriteString(entry.Time)
 
 	if entry.File != "" {
 		b.WriteString("\t")
 		b.WriteString(entry.File)
 	}
 
-	b.WriteString("\t")
-	b.WriteString(msg)
-	b.Write(fields)
+	if entry.Msg != "" {
+		b.WriteString("\t")
+		b.WriteString(entry.Msg)
+	}
+
+	if entry.Formated {
+		msg := fmt.Sprintf(entry.Msg, entry.Args)
+		if msg != "" {
+			b.WriteString("\t")
+			b.WriteString(msg)
+		}
+	} else {
+		for _, arg := range entry.Args {
+			switch v := arg.(type) {
+			case string:
+				b.WriteString("\t")
+				b.WriteString(v)
+			case map[string]any:
+				b.Write(t.parseMap(v))
+			case Field:
+				b.Write(t.parseField(v))
+			default:
+				b.WriteString("\t")
+				b.WriteString(fmt.Sprint(v))
+			}
+		}
+	}
 
 	return b.Bytes(), nil
 }
@@ -125,6 +133,6 @@ func asString(v any) string { // {{{
 	case fmt.Stringer:
 		return val.String()
 	default:
-		return fmt.Sprint(v)
+		return fmt.Sprintf("%+v", v)
 	}
 } // }}}

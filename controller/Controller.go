@@ -57,6 +57,7 @@ func (c *Controller) Init() {}
 func (c *Controller) CheckAuth() { // {{{
 	var checkMethod map[string]struct{}
 	var checkExcept map[string]struct{}
+	var tk x.Token
 
 	if c.Mode == HTTP_MODE {
 		if !x.Conf_auth_api_check_enabled {
@@ -65,6 +66,7 @@ func (c *Controller) CheckAuth() { // {{{
 
 		checkMethod = x.ConfAuthApiCheckMethod
 		checkExcept = x.ConfAuthApiCheckExcept
+		tk = x.APITK
 	} else if c.Mode == RPC_MODE {
 		if !x.Conf_auth_rpc_check_enabled {
 			return
@@ -72,6 +74,7 @@ func (c *Controller) CheckAuth() { // {{{
 
 		checkMethod = x.ConfAuthRpcCheckMethod
 		checkExcept = x.ConfAuthRpcCheckExcept
+		tk = x.RPCTK
 	} else {
 		return
 	}
@@ -103,11 +106,10 @@ func (c *Controller) CheckAuth() { // {{{
 		}
 	}
 
-	token := strings.TrimPrefix(c.GetHeader("authorization"), "Bearer ")
-	appid, ok := x.CheckToken(token)
-	x.Interceptor(ok, x.ERR_AUTH)
+	appid := c.GetString(x.Conf_auth_appid_key, c.GetHeader(x.Conf_auth_appid_key))
+	c.SetCtx(x.Conf_auth_appid_key, appid)
 
-	c.SetCtx("appid", appid)
+	x.Interceptor(tk.CheckToken(c.Ctx, c.GetHeaders(), c.GetParams()), x.ERR_AUTH)
 } // }}}
 
 func (c *Controller) Prepare(w http.ResponseWriter, r *http.Request, controller, action, group string) { // {{{
@@ -157,9 +159,10 @@ func (c *Controller) prepare(ctx context.Context, mode int, controller, action, 
 	c.Ctx = ctx
 
 	// guid 用于日志追踪，可由客户端生成, 依次检查: 请求参数 -> header -> 生成
-	guid := c.GetString("guid", c.GetHeader("guid", x.RandStr(32)))
+	guid := c.GetString("guid", c.GetHeader("guid", x.GetUUID()))
 
 	c.SetCtx("guid", guid)
+	c.SetCtx("mode", c.Mode)
 	c.SetCtx("group", c.Group)
 	c.SetCtx("controller", c.ControllerName)
 	c.SetCtx("action", c.ActionName)
@@ -183,6 +186,8 @@ func (c *Controller) GetHeader(key string, defaultValues ...string) (ret string)
 	if HTTP_MODE == c.Mode {
 		ret = c.R.Header.Get(key)
 	} else if RPC_MODE == c.Mode {
+		key = strings.ToLower(key)
+
 		if c.rpcInHeaders == nil {
 			c.rpcInHeaders, _ = metadata.FromIncomingContext(c.Ctx)
 		}
@@ -196,6 +201,25 @@ func (c *Controller) GetHeader(key string, defaultValues ...string) (ret string)
 
 	if ret == "" && len(defaultValues) > 0 {
 		return defaultValues[0]
+	}
+
+	return ret
+} // }}}
+
+func (c *Controller) GetHeaders() (ret x.MAPS) { // {{{
+	if HTTP_MODE == c.Mode {
+		ret = x.MAPS{}
+		for k, v := range c.R.Header {
+			ret[strings.ToLower(k)] = v[0]
+		}
+	} else if RPC_MODE == c.Mode {
+		if c.rpcInHeaders == nil {
+			c.rpcInHeaders, _ = metadata.FromIncomingContext(c.Ctx)
+		}
+
+		for k, v := range c.rpcInHeaders {
+			ret[k] = v[0]
+		}
 	}
 
 	return ret

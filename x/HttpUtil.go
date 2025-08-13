@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+var localIp string
+
+func init() {
+	localIp = getLocalIp()
+}
+
 // 解析 uri 得到 controller action params
 func ParseRoute(uri, method string) (group, controller_name, action_name string, url_values MAPS) { // {{{
 	url_values = MAPS{}
@@ -87,7 +93,7 @@ func ParseUri(uri string) (group, controller_name, action_name string) { // {{{
 	path := strings.Split(uri, "/")
 
 	return parsePath(path)
-}
+} // }}}
 
 func parsePath(path []string) (group, controller_name, action_name string) { // {{{
 	var current_path string
@@ -129,7 +135,7 @@ func parsePath(path []string) (group, controller_name, action_name string) { // 
 } // }}}
 
 // 获取本机ip
-func GetLocalIp() string { // {{{
+func getLocalIp() string { // {{{
 	addrs, _ := net.InterfaceAddrs()
 	var ip string = ""
 	for _, addr := range addrs {
@@ -142,6 +148,10 @@ func GetLocalIp() string { // {{{
 	}
 
 	return ip
+} // }}}
+
+func GetLocalIp() string { // {{{
+	return localIp
 } // }}}
 
 func GetIp(r *http.Request) string { // {{{

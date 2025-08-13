@@ -7,11 +7,10 @@ import (
 )
 
 type Config struct {
-	ConfigFile string
-	data       map[string]any
+	data map[string]any
 }
 
-func NewConfig(conf_files ...string) (*Config, error) { // {{{
+func NewConfig(conf_files ...string) (*Config, string, error) { // {{{
 	var conf_file string
 
 	for _, v := range conf_files {
@@ -26,16 +25,16 @@ func NewConfig(conf_files ...string) (*Config, error) { // {{{
 	}
 
 	if conf_file == "" {
-		return nil, fmt.Errorf("config file is not exists!")
+		return nil, "", fmt.Errorf("config file is not exists!")
 	}
 
-	y := yaml.NewYaml(filepath.Join(AppRoot, "conf"))
-	m, err := y.YamlToMap(conf_file)
+	y := yaml.NewYaml(conf_file)
+	m, err := y.YamlToMap()
 	if err != nil {
-		return nil, err
+		return nil, conf_file, err
 	}
 
-	return &Config{conf_file, m}, nil
+	return &Config{m}, conf_file, nil
 } // }}}
 
 type ConfVal struct {
@@ -221,6 +220,12 @@ func (this *Config) Get(keys ...string) *ConfVal { // {{{
 	val, ok := GetMapNode(this.data, keys...)
 	return &ConfVal{
 		val, ok,
+	}
+} // }}}
+
+func (this *Config) GetConifg(keys ...string) *Config { // {{{
+	return &Config{
+		this.Get(keys...).Map(),
 	}
 } // }}}
 

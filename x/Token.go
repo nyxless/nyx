@@ -1,18 +1,41 @@
 package x
 
 import (
+	"context"
 	"strings"
 )
 
-func GenApiToken(appid, secret string) string { // {{{
-	return GenToken(appid, secret, false)
-} // }}}
+type Token interface {
+	CheckToken(ctx context.Context, header MAPS, params MAP) bool
+}
 
-func GenRpcToken(appid, secret string) string { // {{{
-	return GenToken(appid, secret, true)
-} // }}}
+type DefaultToken struct{}
 
-func GenToken(appid, secret string, is_rpc bool, ts ...int) string { // {{{
+func (dt *DefaultToken) CheckToken(ctx context.Context, hd MAPS, params MAP) bool {
+	appid, _ := hd[Conf_auth_appid_key]
+	nonce, _ := hd["nonce"]
+	timestamp, _ := hd["timestamp"]
+	authorization, _ := hd["authorization"]
+	token := strings.TrimPrefix(authorization, "Bearer ")
+
+	secret, _ := ConfAuthApp[appid]
+
+	ttl := 0
+	if AsInt(ctx.Value("mode")) == 1 {
+		ttl = Conf_auth_rpc_check_ttl
+	} else {
+		ttl = Conf_auth_api_check_ttl
+	}
+
+	if ttl > 0 && Now()-AsInt(timestamp) > ttl {
+		return false
+	}
+
+	return VerifySha256(token, appid+nonce+timestamp, secret)
+}
+
+/*
+func genToken(appid, secret string, is_rpc bool, ts ...int) string { // {{{
 	var t int
 	if len(ts) > 0 {
 		t = ts[0]
@@ -32,10 +55,7 @@ func GenToken(appid, secret string, is_rpc bool, ts ...int) string { // {{{
 } // }}}
 
 func CheckToken(token string) (string, bool) { // {{{
-	tks := strings.SplitN(token, ".", 4)
-	if len(tks) < 3 { //允许省略最后的rpc标识部分
-		return "", false
-	}
+	tks := strings.SplitN(token, ".", 3)
 
 	appid := tks[1]
 	t := tks[2]
@@ -54,7 +74,7 @@ func CheckToken(token string) (string, bool) { // {{{
 	is_rpc := rpc == "1"
 
 	ti := AsInt(t)
-	if GenToken(appid, secret, is_rpc, ti) != token {
+	if genToken(appid, secret, is_rpc, ti) != token {
 		return appid, false
 	}
 
@@ -71,3 +91,4 @@ func CheckToken(token string) (string, bool) { // {{{
 
 	return appid, true
 } // }}}
+*/

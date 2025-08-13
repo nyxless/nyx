@@ -26,6 +26,10 @@ func TransBegin(opts ...any) (*db.SqlClient, error) {
 		panic("db资源不存在: " + conf_name)
 	}
 
-	tx := x.DB.Get(conf)
+	tx, err := x.DB.Get(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	return tx.Begin(is_readonly)
 }

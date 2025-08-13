@@ -26,9 +26,12 @@ type SqlClient struct {
 	id       string
 }
 
-type FuncSqlOption func(*SqlOption)
+type FnSqlOption func(*SqlOption)
 
 type SqlOption struct {
+	table     string
+	fields    string
+	alias     string
 	leftJoin  string
 	innerJoin string
 	idx       string
@@ -39,43 +42,120 @@ type SqlOption struct {
 	vals      []any
 }
 
-func WithLeftJoin(left_join string) FuncSqlOption { // {{{
+func (so *SqlOption) ToSql() (string, []any) { //{{{
+	var sb strings.Builder
+
+	if so.fields == "" {
+		so.fields = "*"
+	}
+
+	sb.WriteString("SELECT ")
+	sb.WriteString(so.fields)
+
+	if so.table != "" {
+		sb.WriteString(" FROM ")
+		sb.WriteString(so.table)
+
+		if so.alias != "" {
+			sb.WriteString(" ")
+			sb.WriteString(so.alias)
+		}
+	}
+
+	if so.idx != "" {
+		sb.WriteString(" FORCE INDEX (")
+		sb.WriteString(so.idx)
+		sb.WriteString(")")
+	}
+
+	if so.leftJoin != "" {
+		sb.WriteString(" LEFT JOIN ")
+		sb.WriteString(so.leftJoin)
+	}
+
+	if so.innerJoin != "" {
+		sb.WriteString(" INNER JOIN ")
+		sb.WriteString(so.innerJoin)
+	}
+
+	if so.where != "" {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(so.where)
+	}
+
+	if so.group != "" {
+		sb.WriteString(" GROUP BY ")
+		sb.WriteString(so.group)
+	}
+
+	if so.order != "" {
+		sb.WriteString(" ORDER BY ")
+		sb.WriteString(so.order)
+	}
+
+	if so.limits != "" {
+		sb.WriteString(" LIMIT ")
+		sb.WriteString(so.limits)
+	}
+
+	return sb.String(), so.vals
+} // }}}
+
+func WithTable(table string) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.table = table
+	}
+} // }}}
+
+func WithFields(fields string) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.fields = fields
+	}
+} // }}}
+
+func WithAlias(alias string) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.alias = alias
+	}
+} // }}}
+
+func WithLeftJoin(left_join string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.leftJoin = left_join
 	}
 } // }}}
 
-func WithInnerJoin(inner_join string) FuncSqlOption { // {{{
+func WithInnerJoin(inner_join string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.innerJoin = inner_join
 	}
 } // }}}
 
-func WithIdx(idx string) FuncSqlOption { // {{{
+func WithIdx(idx string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.idx = idx
 	}
 } // }}}
 
-func WithGroup(g string) FuncSqlOption { // {{{
+func WithGroup(g string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.group = g
 	}
 } // }}}
 
-func WithOrder(o string) FuncSqlOption { // {{{
+func WithOrder(o string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.order = o
 	}
 } // }}}
 
-func WithLimits(l string) FuncSqlOption { // {{{
+func WithLimits(l string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.limits = l
 	}
 } // }}}
 
-func WithWhere(where string, vals ...any) FuncSqlOption { // {{{
+func WithWhere(where string, vals []any) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.where = where
 		s.vals = vals
@@ -402,20 +482,20 @@ func (this *SqlClient) execute(sqlstr string, val ...interface{}) (result sql.Re
 	return result, errorHandle(err)
 } // }}}
 
-func (this *SqlClient) GetOne(table, fields string, options ...FuncSqlOption) (any, error) { // {{{
+func (this *SqlClient) GetOne(options ...FnSqlOption) (any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := this.prepareSql(table, fields, options)
+	sqlstr, vals := this.prepareSql(options)
 	return this.QueryOne(sqlstr, vals...)
 } // }}}
 
-func (this *SqlClient) GetRow(table, fields string, options ...FuncSqlOption) (map[string]any, error) { // {{{
+func (this *SqlClient) GetRow(options ...FnSqlOption) (map[string]any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := this.prepareSql(table, fields, options)
+	sqlstr, vals := this.prepareSql(options)
 	return this.QueryRow(sqlstr, vals...)
 } // }}}
 
-func (this *SqlClient) GetAll(table, fields string, options ...FuncSqlOption) ([]map[string]any, error) { //{{{
-	sqlstr, vals := this.prepareSql(table, fields, options)
+func (this *SqlClient) GetAll(options ...FnSqlOption) ([]map[string]any, error) { //{{{
+	sqlstr, vals := this.prepareSql(options)
 	return this.Query(sqlstr, vals...)
 } // }}}
 
@@ -496,48 +576,13 @@ func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIterator, err
 	return newRowIterator(rows)
 } // }}}
 
-func (this *SqlClient) prepareSql(table, fields string, options []FuncSqlOption) (string, []any) { //{{{
+func (this *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
 	so := &SqlOption{}
 	for _, opt := range options {
 		opt(so)
 	}
 
-	if "" != so.where {
-		so.where = " WHERE " + so.where
-	}
-
-	fidx := ""
-	if "" != so.idx {
-		fidx = " FORCE INDEX (" + so.idx + ") "
-	}
-
-	if "" != so.group {
-		so.where += " GROUP BY " + so.group
-	}
-
-	if "" != so.order {
-		so.where += " ORDER BY " + so.order
-	}
-
-	if "" != so.limits {
-		so.where += " LIMIT " + so.limits
-	}
-
-	if "" != so.leftJoin {
-		so.leftJoin = " LEFT JOIN " + so.leftJoin
-	}
-
-	if "" != so.innerJoin {
-		so.innerJoin = " INNER JOIN " + so.innerJoin
-	}
-
-	if table != "" {
-		table = " FROM " + table
-	}
-
-	sqlstr := "SELECT " + fields + table + fidx + so.leftJoin + so.innerJoin + so.where
-
-	return sqlstr, so.vals
+	return so.ToSql()
 } // }}}
 
 func (this *SqlClient) explain(sqlstr string, val ...any) { //{{{

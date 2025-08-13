@@ -6,24 +6,23 @@ import (
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
 
 type Yaml struct {
-	BaseDir string
+	baseDir  string
+	filename string
 }
 
-func NewYaml(base_dir string) *Yaml {
-	return &Yaml{base_dir}
+func NewYaml(filename string) *Yaml {
+	baseDir := path.Dir(filename)
+	return &Yaml{baseDir, filename}
 }
 
 // 处理 !include 开头标签, 替换到主文件
 func (y *Yaml) prepare(filename string, indent int) ([]byte, error) { // {{{
-	if !filepath.IsAbs(filename) {
-		filename = filepath.Join(y.BaseDir, filename)
-	}
-
 	// 打开文件
 	file, err := os.Open(filename)
 	if err != nil {
@@ -43,6 +42,9 @@ func (y *Yaml) prepare(filename string, indent int) ([]byte, error) { // {{{
 			includedFile := strings.TrimSpace(line[(ind + 9):])
 			//fmt.Println(includedFile)
 			// 递归处理包含文件
+			if !filepath.IsAbs(includedFile) {
+				includedFile = filepath.Join(y.baseDir, includedFile)
+			}
 			includedContent, err := y.prepare(includedFile, indent+ind)
 			if err != nil {
 				return nil, fmt.Errorf("error processing included file %s: %v", includedFile, err)
@@ -150,7 +152,6 @@ func deduplicateNodes(node *yaml.Node) { // {{{
 
 // 处理值中include标签
 func (y *Yaml) process(src []byte) ([]byte, error) { // {{{
-	BaseDir := "."
 	var node yaml.Node
 	if err := yaml.Unmarshal(src, &node); err != nil {
 		return nil, err
@@ -174,7 +175,7 @@ func (y *Yaml) process(src []byte) ([]byte, error) { // {{{
 			}
 
 			if !filepath.IsAbs(filename) {
-				filename = filepath.Join(BaseDir, filename)
+				filename = filepath.Join(y.baseDir, filename)
 			}
 
 			content, err := y.parse(filename)
@@ -199,8 +200,8 @@ func (y *Yaml) process(src []byte) ([]byte, error) { // {{{
 	return yaml.Marshal(&node)
 } // }}}
 
-func (y *Yaml) YamlToMap(filename string) (map[string]any, error) { // {{{
-	res, err := y.parse(filename)
+func (y *Yaml) YamlToMap() (map[string]any, error) { // {{{
+	res, err := y.parse(y.filename)
 	if err != nil {
 		return nil, err
 	}

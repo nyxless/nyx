@@ -7,7 +7,6 @@ import (
 	"github.com/nyxless/nyx/x/endless"
 	"github.com/nyxless/nyx/x/log"
 	"google.golang.org/grpc"
-	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -84,13 +83,13 @@ func (this *Nyx) envInit() { // {{{
 
 	x.AppRoot = app_root //服务根路径
 
-	config, err := x.NewConfig(config_file, x.AppRoot+"/conf/app.conf", "../conf/app.conf", "./conf/app.conf", "app.conf") //按顺序寻找配置文件
+	config, config_file, err := x.NewConfig(config_file, x.AppRoot+"/conf/app.conf", "../conf/app.conf", "./conf/app.conf", "app.conf") //按顺序寻找配置文件
 	if nil != err {
 		x.Println("Error: ", err)
 		os.Exit(0)
 	}
 
-	x.Println("Config Init: ", config.ConfigFile)
+	x.Println("Config Init: ", config_file)
 
 	x.Conf = config
 
@@ -141,6 +140,7 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_auth_rpc_check_method = x.Conf.GetStringSlice("auth", "rpc_check", "method")
 	x.Conf_auth_rpc_check_except = x.Conf.GetStringSlice("auth", "rpc_check", "except")
 	x.Conf_auth_app = x.Conf.GetMapsSlice("auth", "app")
+	x.Conf_auth_appid_key = x.Conf.GetDefString("appid", "auth", "appid_key")
 
 	x.ConfAuthApiCheckMethod = map[string]struct{}{}
 	x.ConfAuthApiCheckExcept = map[string]struct{}{}
@@ -224,7 +224,7 @@ func (this *Nyx) parseRouter() { // {{{
 
 				//过滤空值
 				if from != "" || to != "" {
-					url_prefix = append(url_prefix, map[string]string{"from": from, "to": to})
+					url_prefix = append(url_prefix, map[string]string{"from": strings.ToLower(from), "to": strings.ToLower(to)})
 				}
 			}
 		}
@@ -325,122 +325,68 @@ func (this *Nyx) useLogger() error { // {{{
 		return nil
 	}
 
-	log_queue_size := x.Conf.GetInt("log_queue_size")
-	x.Logger = log.NewLogger(log_queue_size)
-
-	log_level := x.Conf.GetInt("log_level")
-	if x.Debug {
-		x.Logger.SetDebug(true)
-		log_level = 0xFF
-	}
-	x.Logger.SetLevel(log.LogLevel(log_level))
-	log_print_filename := x.Conf.GetDefBool(false, "log_print_filename")
-	x.Logger.PrintFileName(log_print_filename)
-
-	log_bulk_size := x.Conf.GetInt("log_bulk_size")
-	if log_bulk_size > 0 {
-		log.DefaultBulkSize = log_bulk_size
-	}
-
-	log_file := x.Conf.GetBool("log_file")
-	if !log_file {
-		return nil
-	}
-
-	log_rule := x.Conf.GetMap("log_rule")
-	log_level_rule := x.Conf.GetMap("log_level_rule")
-
-	writers := map[string]io.Writer{}
-	writer_levels := map[io.Writer][]string{}
-	conf := map[string]string{}
+	log_rule := x.Conf.GetMap("log_file_rule")
+	log_level_rule := x.Conf.GetMap("log_file_level_rule")
 
 	def_path := x.AsString(log_rule["path"])
-	def_naming_format := x.AsString(log_rule["naming_format"])
-	def_buffer_size := x.AsInt(log_rule["buffer_size"])
-	def_file_size := x.AsInt(log_rule["file_size"])
-	def_compress := x.AsBool(log_rule["compress"])
-	def_compress_before := x.AsInt(log_rule["compress_before"])
-	def_remove := x.AsBool(log_rule["remove"])
-	def_remove_before := x.AsInt(log_rule["remove_before"])
-
 	if !filepath.IsAbs(def_path) {
 		def_path = filepath.Join(x.AppRoot, def_path)
 	}
 
-	def_key := def_path + def_naming_format
+	file_rule := &log.LogFileRule{
+		Path:           def_path,
+		NamingFormat:   x.AsString(log_rule["naming_format"]),
+		BufferSize:     x.AsInt(log_rule["buffer_size"]),
+		FileSize:       x.AsInt(log_rule["file_size"]),
+		Compress:       x.AsBool(log_rule["compress"]),
+		CompressBefore: x.AsInt(log_rule["compress_before"]),
+		Remove:         x.AsBool(log_rule["remove"]),
+		RemoveBefore:   x.AsInt(log_rule["remove_before"]),
+	}
 
-	var err error
-	for level_name, rule := range log_level_rule { // {{{
-		logpath := x.AsString(x.GetNode(rule, "path"), def_path)
-		naming_format := x.AsString(x.GetNode(rule, "naming_format"), def_naming_format)
-		buffer_size := x.AsInt(x.GetNode(rule, "buffer_size"), def_buffer_size)
-		file_size := x.AsInt(x.GetNode(rule, "file_size"), def_file_size)
-		compress := x.AsBool(x.GetNode(rule, "compress"), def_compress)
-		compress_before := x.AsInt(x.GetNode(rule, "compress_before"), def_compress_before)
-		remove := x.AsBool(x.GetNode(rule, "remove"), def_remove)
-		remove_before := x.AsInt(x.GetNode(rule, "remove_before"), def_remove_before)
+	file_level_rule := map[string]*log.LogFileRule{}
+	for level_name, rule := range log_level_rule {
+		logpath := x.AsString(x.GetNode(rule, "path"), file_rule.Path)
 
 		if !filepath.IsAbs(logpath) {
 			logpath = filepath.Join(x.AppRoot, logpath)
 		}
 
-		key := logpath + naming_format
-
-		conf[level_name] = key
-		writer, ok := writers[key]
-		if !ok {
-			writer, err = log.NewFileWriter(logpath, naming_format,
-				log.WithBufferSize(buffer_size),
-				log.WithFileSize(file_size),
-				log.WithCompress(compress),
-				log.WithCompressBefore(compress_before),
-				log.WithRemove(remove),
-				log.WithRemoveBefore(remove_before),
-			)
-			if err != nil {
-				return err
-			}
-			writers[key] = writer
-		}
-
-		if writer_levels[writer] == nil {
-			writer_levels[writer] = []string{}
-		}
-
-		writer_levels[writer] = append(writer_levels[writer], level_name)
-	} // }}}
-
-	for _, level_name := range []string{"FATAL", "ERROR", "WARN", "NOTICE", "INFO", "DEBUG"} {
-		if _, ok := conf[level_name]; !ok {
-			conf[level_name] = def_key
-			writer, ok := writers[def_key]
-			if !ok {
-				writer, err = log.NewFileWriter(def_path, def_naming_format,
-					log.WithBufferSize(def_buffer_size),
-					log.WithFileSize(def_file_size),
-					log.WithCompress(def_compress),
-					log.WithCompressBefore(def_compress_before),
-					log.WithRemove(def_remove),
-					log.WithRemoveBefore(def_remove_before),
-				)
-				if err != nil {
-					return err
-				}
-
-				writers[def_key] = writer
-			}
-
-			if writer_levels[writer] == nil {
-				writer_levels[writer] = []string{}
-			}
-
-			writer_levels[writer] = append(writer_levels[writer], level_name)
+		file_level_rule[level_name] = &log.LogFileRule{
+			Path:           logpath,
+			NamingFormat:   x.AsString(x.GetNode(rule, "naming_format"), file_rule.NamingFormat),
+			BufferSize:     x.AsInt(x.GetNode(rule, "buffer_size"), file_rule.BufferSize),
+			FileSize:       x.AsInt(x.GetNode(rule, "file_size"), file_rule.FileSize),
+			Compress:       x.AsBool(x.GetNode(rule, "compress"), file_rule.Compress),
+			CompressBefore: x.AsInt(x.GetNode(rule, "compress_before"), file_rule.CompressBefore),
+			Remove:         x.AsBool(x.GetNode(rule, "remove"), file_rule.Remove),
+			RemoveBefore:   x.AsInt(x.GetNode(rule, "remove_before"), file_rule.RemoveBefore),
 		}
 	}
 
-	x.Logger.RemoveWriter(log.DefaultWriter)
-	for writer, level_names := range writer_levels {
-		x.Logger.AddWriter(writer, level_names...)
+	log_options := &log.LogOptions{
+		QueueSize:     x.Conf.GetDefInt(1024, "log_queue_size"),
+		Level:         x.Conf.GetDefInt(0xFF, "log_level"),
+		TraceFile:     x.Conf.GetDefBool(false, "log_trace_file"),
+		UseQueue:      x.Conf.GetDefBool(true, "log_use_queue"),
+		BulkSize:      x.Conf.GetDefInt(32, "log_bulk_size"),
+		FileEnabled:   x.Conf.GetDefBool(true, "log_file_enabled"),
+		FileRule:      file_rule,
+		FileLevelRule: file_level_rule,
+		ShowLevel:     x.Conf.GetDefBool(true, "log_show_level"),
+		Prefix:        x.Conf.GetString("log_prefix"),
+		TimeFormat:    x.Conf.GetString("log_time_format"),
+	}
+
+	var err error
+	x.Logger, err = log.NewLogger(log_options)
+	if err != nil {
+		return err
+	}
+
+	if x.Debug {
+		x.Logger.SetDebug(true)
+		x.Logger.SetLevel(log.LevelAll)
 	}
 
 	return nil

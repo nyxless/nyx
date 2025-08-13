@@ -3,7 +3,6 @@ package log
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 type JsonEncoder struct{}
@@ -11,9 +10,11 @@ type JsonEncoder struct{}
 func (e *JsonEncoder) Encode(entry *Entry) ([]byte, error) {
 	msg := entry.Msg
 	m := map[string]interface{}{
-		"time":  entry.Time.Format(time.RFC3339),
-		"level": entry.Level,
-		"msg":   msg,
+		"time": entry.Time,
+	}
+
+	if entry.Level != "" {
+		m["level"] = entry.Level
 	}
 
 	if entry.File != "" {
@@ -39,7 +40,9 @@ func (e *JsonEncoder) Encode(entry *Entry) ([]byte, error) {
 		}
 	}
 
-	m["msg"] = msg
+	if msg != "" {
+		m["msg"] = msg
+	}
 
 	return json.Marshal(m)
 }

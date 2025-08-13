@@ -25,10 +25,12 @@ var Logger *log.Logger
 var LocalCache *cache.Cache
 
 // 全局共用db代理
-var DB = NewDBProxy()
+var DB *DBProxy
 
 // 全局共用redis代理
-var Redis = NewRedisProxy()
+var Redis *RedisProxy
+
+var APITK, RPCTK Token
 
 // 配置文件变量缓存(框架中使用)，初始化时赋值
 var (
@@ -51,6 +53,7 @@ var (
 	Conf_auth_rpc_check_method  []string
 	Conf_auth_rpc_check_except  []string
 	Conf_auth_app               []map[string]string
+	Conf_auth_appid_key         string
 
 	//Conf_auth_app变形map[appid]secret
 	ConfAuthApp            map[string]string
@@ -119,4 +122,17 @@ type MAPA = map[any]any
 
 type Mapper interface {
 	ToMap() map[string]any
+}
+
+func init() {
+	DB = NewDBProxy()
+	Redis = NewRedisProxy()
+
+	if APITK == nil {
+		APITK = &DefaultToken{}
+	}
+
+	if RPCTK == nil {
+		RPCTK = &DefaultToken{}
+	}
 }
