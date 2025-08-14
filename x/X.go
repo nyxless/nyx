@@ -48,6 +48,8 @@ var (
 	Conf_auth_rpc_check_enabled bool
 	Conf_auth_api_check_ttl     int
 	Conf_auth_rpc_check_ttl     int
+	Conf_auth_api_check_nonce   bool
+	Conf_auth_rpc_check_nonce   bool
 	Conf_auth_api_check_method  []string
 	Conf_auth_api_check_except  []string
 	Conf_auth_rpc_check_method  []string

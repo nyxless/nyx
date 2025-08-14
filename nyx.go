@@ -135,6 +135,8 @@ func (this *Nyx) cacheConf() { // {{{
 	x.Conf_auth_rpc_check_enabled = x.Conf.GetDefBool(true, "auth", "rpc_check", "enabled")
 	x.Conf_auth_api_check_ttl = x.Conf.GetDefInt(3600, "auth", "api_check", "ttl")
 	x.Conf_auth_rpc_check_ttl = x.Conf.GetDefInt(3600, "auth", "rpc_check", "ttl")
+	x.Conf_auth_api_check_nonce = x.Conf.GetDefBool(false, "auth", "api_check", "check_nonce")
+	x.Conf_auth_rpc_check_nonce = x.Conf.GetDefBool(false, "auth", "rpc_check", "check_nonce")
 	x.Conf_auth_api_check_method = x.Conf.GetStringSlice("auth", "api_check", "method")
 	x.Conf_auth_api_check_except = x.Conf.GetStringSlice("auth", "api_check", "except")
 	x.Conf_auth_rpc_check_method = x.Conf.GetStringSlice("auth", "rpc_check", "method")

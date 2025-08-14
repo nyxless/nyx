@@ -21,14 +21,25 @@ func (dt *DefaultToken) CheckToken(ctx context.Context, hd MAPS, params MAP) boo
 	secret, _ := ConfAuthApp[appid]
 
 	ttl := 0
+	check_nonce := false
 	if AsInt(ctx.Value("mode")) == 1 {
 		ttl = Conf_auth_rpc_check_ttl
+		check_nonce = Conf_auth_rpc_check_nonce
 	} else {
 		ttl = Conf_auth_api_check_ttl
+		check_nonce = Conf_auth_api_check_nonce
 	}
 
 	if ttl > 0 && Now()-AsInt(timestamp) > ttl {
 		return false
+	}
+
+	if LocalCache != nil && check_nonce {
+		if _, err := LocalCache.Get([]byte(nonce)); err == nil {
+			return false
+		}
+
+		LocalCache.Set([]byte(nonce), []byte(""), ttl)
 	}
 
 	return VerifySha256(token, appid+nonce+timestamp, secret)
