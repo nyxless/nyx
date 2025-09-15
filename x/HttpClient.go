@@ -98,7 +98,7 @@ func (this *HttpClient) Request(method, requrl string, post_data interface{}, he
 				setHost = v[0]
 			} else if key == "content-type" {
 				has_content_type = true
-				if strings.ToLower(v[0]) == "application/json" {
+				if strings.EqualFold(v[0], "application/json") {
 					is_json = true
 				}
 			}
@@ -137,7 +137,7 @@ func (this *HttpClient) Request(method, requrl string, post_data interface{}, he
 		req.Header = header
 	}
 
-	if nil != data && "post" == strings.ToLower(method) && !has_content_type {
+	if nil != data && strings.EqualFold(method, "post") && !has_content_type {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 

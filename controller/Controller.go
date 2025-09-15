@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -42,6 +43,8 @@ type Controller struct {
 	rpcInHeaders   metadata.MD
 	rpcOutHeaders  x.MAPS
 	rpcContent     x.MAP
+	rpcError       error
+	rpcStream      x.Stream //grpc stream
 	Group          string
 	ControllerName string
 	ActionName     string
@@ -140,8 +143,9 @@ func (c *Controller) getRequestBody(r *http.Request) ([]byte, error) { // {{{
 	return buf, nil
 } // }}}
 
-func (c *Controller) PrepareRpc(params x.MAP, ctx context.Context, controller, action, group string) { // {{{
+func (c *Controller) PrepareRpc(ctx context.Context, params x.MAP, controller, action, group string, stream x.Stream) { // {{{
 	c.IR = &iRequest{RpcForm: params}
+	c.rpcStream = stream
 	c.prepare(ctx, RPC_MODE, controller, action, group)
 } // }}}
 
@@ -207,8 +211,8 @@ func (c *Controller) GetHeader(key string, defaultValues ...string) (ret string)
 } // }}}
 
 func (c *Controller) GetHeaders() (ret x.MAPS) { // {{{
+	ret = x.MAPS{}
 	if HTTP_MODE == c.Mode {
-		ret = x.MAPS{}
 		for k, v := range c.R.Header {
 			ret[strings.ToLower(k)] = v[0]
 		}
@@ -660,7 +664,7 @@ func (c *Controller) RenderResponser(errno int, errmsg string, retdata any) x.MA
 		"code":    errno,
 		"msg":     errmsg,
 		"time":    time.Now().Unix(),
-		"consume": c.Cost(),
+		"consume": x.Cost(c.startTime),
 		"data":    retdata, //错误时，也可附带一些数据
 	}
 } // }}}
@@ -686,20 +690,24 @@ func (c *Controller) RenderStatus(code int) { // {{{
 
 // 渲染html模板
 func (c *Controller) RenderHtml(files ...string) { // {{{
-	file := ""
-	if len(files) > 0 {
-		file = files[0]
+	if c.Tpl == nil {
+		c.RenderText("Template is not enabled!")
+		return
 	}
 
 	uri := c.ControllerName + "_" + c.ActionName
 
-	if "" == file {
+	file := ""
+	if len(files) > 0 {
+		file = files[0]
+		if c.Group != "" && strings.Index(file, "/") == -1 {
+			file = filepath.Join(c.Group, file)
+		}
+		if strings.Index(file, ".") == -1 {
+			file = file + x.TemplateSuffix
+		}
+	} else {
 		file = uri + x.TemplateSuffix
-	}
-
-	if c.Tpl == nil {
-		c.RenderText("Template is not enabled!")
-		return
 	}
 
 	err := c.Tpl.Render(c.W, uri, file)
@@ -709,8 +717,27 @@ func (c *Controller) RenderHtml(files ...string) { // {{{
 	}
 } // }}}
 
+// 输出流(http/rpc)
+func (c *Controller) RenderStream(data any) error { // {{{
+	if c.Mode == HTTP_MODE {
+		stream, ok := data.([]byte)
+		if !ok {
+			return fmt.Errorf("render data type is not []byte!")
+		}
+
+		return c.renderHttpStream(stream)
+	} else if c.Mode == RPC_MODE {
+		c.Render(data)
+		if c.rpcError != nil {
+			return c.rpcError
+		}
+	}
+
+	return nil
+} // }}}
+
 // 输出HTTP流
-func (c *Controller) RenderStream(data []byte) error { // {{{
+func (c *Controller) renderHttpStream(data []byte) error { // {{{
 	select {
 	case <-c.R.Context().Done():
 		// 客户端断开连接
@@ -761,6 +788,15 @@ func (c *Controller) renderRpc(data x.MAP) { // {{{
 	header := metadata.New(c.rpcOutHeaders)
 	grpc.SendHeader(c.Ctx, header)
 	c.rpcContent = data
+
+	if c.Ctx.Err() == context.Canceled {
+		c.rpcError = fmt.Errorf("client cancelled the request")
+		return
+	}
+
+	if c.rpcStream != nil {
+		c.rpcError = c.rpcStream.Send(x.BuildReply(data))
+	}
 } // }}}
 
 func (c *Controller) logFatal(data ...any) { // {{{
@@ -865,12 +901,14 @@ func (c *Controller) OmitLog(v ...string) { // {{{
 	c.logOmitParams = append(c.logOmitParams, v...)
 } // }}}
 
-func (c *Controller) Cost() int64 {
-	return time.Now().Sub(c.startTime).Nanoseconds() / 1000 / 1000
-}
+func (c *Controller) GetRpcContent() (x.MAP, error) { // {{{
+	return c.rpcContent, c.rpcError
+} // }}}
 
-func (c *Controller) GetRpcContent() x.MAP { // {{{
-	return c.rpcContent
+func (c *Controller) Assign(vals ...any) { // {{{
+	if c.Tpl != nil {
+		c.Tpl.Assign(vals...)
+	}
 } // }}}
 
 // 便于调式时直接使用

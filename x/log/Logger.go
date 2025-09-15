@@ -304,9 +304,8 @@ func (l *Logger) autoFlush() { // {{{
 	select {
 	case l.queue <- l.bulk:
 		l.bulk = GetBulk()
-		if l.debug {
-			fmt.Println("log queue size:", l.queueSize, len(l.queue))
-		}
+
+		//fmt.Println("log queue size:", l.queueSize, len(l.queue))
 	default:
 		fmt.Println("log channel full, queue size:", l.queueSize, len(l.queue))
 		return

@@ -6,7 +6,7 @@ import (
 )
 
 // opts: confName, [isReadOnly], 最后一个参数如果为bool值，则表示是否开启只读事务
-func TransBegin(opts ...any) (*db.SqlClient, error) {
+func TransBegin(opts ...any) (db.DBClient, error) {
 	conf_name := "db_master"
 	is_readonly := false
 

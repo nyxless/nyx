@@ -6,10 +6,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
+
+func NewDBClient() DBClient { // {{{
+	return NewSqlClient()
+} // }}}
 
 func NewSqlClient() *SqlClient { // {{{
 	return &SqlClient{}
@@ -25,142 +28,6 @@ type SqlClient struct {
 	p        *SqlClient //实际上没什么用，只在事务中打印调式信息时使用(因为在事务中执行explain语句会出现'busy buffer'的错误)
 	id       string
 }
-
-type FnSqlOption func(*SqlOption)
-
-type SqlOption struct {
-	table     string
-	fields    string
-	alias     string
-	leftJoin  string
-	innerJoin string
-	idx       string
-	group     string
-	order     string
-	limits    string
-	where     string
-	vals      []any
-}
-
-func (so *SqlOption) ToSql() (string, []any) { //{{{
-	var sb strings.Builder
-
-	if so.fields == "" {
-		so.fields = "*"
-	}
-
-	sb.WriteString("SELECT ")
-	sb.WriteString(so.fields)
-
-	if so.table != "" {
-		sb.WriteString(" FROM ")
-		sb.WriteString(so.table)
-
-		if so.alias != "" {
-			sb.WriteString(" ")
-			sb.WriteString(so.alias)
-		}
-	}
-
-	if so.idx != "" {
-		sb.WriteString(" FORCE INDEX (")
-		sb.WriteString(so.idx)
-		sb.WriteString(")")
-	}
-
-	if so.leftJoin != "" {
-		sb.WriteString(" LEFT JOIN ")
-		sb.WriteString(so.leftJoin)
-	}
-
-	if so.innerJoin != "" {
-		sb.WriteString(" INNER JOIN ")
-		sb.WriteString(so.innerJoin)
-	}
-
-	if so.where != "" {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(so.where)
-	}
-
-	if so.group != "" {
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(so.group)
-	}
-
-	if so.order != "" {
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(so.order)
-	}
-
-	if so.limits != "" {
-		sb.WriteString(" LIMIT ")
-		sb.WriteString(so.limits)
-	}
-
-	return sb.String(), so.vals
-} // }}}
-
-func WithTable(table string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.table = table
-	}
-} // }}}
-
-func WithFields(fields string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.fields = fields
-	}
-} // }}}
-
-func WithAlias(alias string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.alias = alias
-	}
-} // }}}
-
-func WithLeftJoin(left_join string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.leftJoin = left_join
-	}
-} // }}}
-
-func WithInnerJoin(inner_join string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.innerJoin = inner_join
-	}
-} // }}}
-
-func WithIdx(idx string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.idx = idx
-	}
-} // }}}
-
-func WithGroup(g string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.group = g
-	}
-} // }}}
-
-func WithOrder(o string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.order = o
-	}
-} // }}}
-
-func WithLimits(l string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.limits = l
-	}
-} // }}}
-
-func WithWhere(where string, vals []any) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.where = where
-		s.vals = vals
-	}
-} // }}}
 
 func (this *SqlClient) SetDB(dbt string, _db *sql.DB) error { // {{{
 	this.dbType = dbt
@@ -194,7 +61,7 @@ func (this *SqlClient) ID() string { //{{{
 	return this.id
 } //}}}
 
-func (this *SqlClient) Begin(is_readonly bool) (*SqlClient, error) { // {{{
+func (this *SqlClient) Begin(is_readonly bool) (DBClient, error) { // {{{
 	//tx, err := this.db.Begin()
 	tx, err := this.db.BeginTx(context.Background(), &sql.TxOptions{
 		ReadOnly: is_readonly,
@@ -291,7 +158,7 @@ func (this *SqlClient) Insert(table string, vals ...map[string]any) (int, error)
 				return 0, fmt.Errorf("row %d missing column %s", i, col)
 			}
 
-			if fval := this.getExprParam(val); fval != "" {
+			if fval := GetExprParam(val); fval != "" {
 				ph[j] = fval
 			} else {
 				ph[j] = "?"
@@ -304,7 +171,7 @@ func (this *SqlClient) Insert(table string, vals ...map[string]any) (int, error)
 	buf.WriteString(strings.Join(placeholders, ", "))
 
 	sqlstr := buf.String()
-	result, err := this.execute(sqlstr, args...)
+	result, err := this.Exec(sqlstr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -336,7 +203,7 @@ func (this *SqlClient) Update(table string, vals map[string]interface{}, where s
 		buf.WriteString(col)
 		buf.WriteString("=")
 
-		if fval := this.getExprParam(val); fval != "" {
+		if fval := GetExprParam(val); fval != "" {
 			buf.WriteString(fval)
 		} else {
 			buf.WriteString("?")
@@ -351,7 +218,7 @@ func (this *SqlClient) Update(table string, vals map[string]interface{}, where s
 	sqlstr := buf.String()
 
 	value = append(value, val...)
-	result, err := this.execute(sqlstr, value...)
+	result, err := this.Exec(sqlstr, value...)
 	if err != nil {
 		return 0, err
 	}
@@ -378,7 +245,7 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 	// 插入
 	for col, val := range vals {
 		columns = append(columns, col)
-		if fval := this.getExprParam(val); fval != "" {
+		if fval := GetExprParam(val); fval != "" {
 			placeholders = append(placeholders, fval)
 		} else {
 			placeholders = append(placeholders, "?")
@@ -392,7 +259,7 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 			continue
 		}
 
-		if fval := this.getExprParam(val); fval != "" {
+		if fval := GetExprParam(val); fval != "" {
 			updateParts = append(updateParts, col+" = "+fval)
 		} else {
 			updateParts = append(updateParts, col+" = ?")
@@ -411,7 +278,7 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 	buf.WriteString(strings.Join(updateParts, ", "))
 
 	sqlstr := buf.String()
-	result, err := this.execute(sqlstr, args...)
+	result, err := this.Exec(sqlstr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -427,34 +294,38 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 	return int(lastid), nil
 } // }}}
 
-// limit <= 0 时表示删除所有符合条件的数据
-func (this *SqlClient) Delete(table, order string, limit int, where string, val ...any) (int, error) { // {{{
-	if "" != order {
-		where += " order by " + order
+func (this *SqlClient) Delete(options ...FnSqlOption) (int, error) { // {{{
+	var sb strings.Builder
+
+	so := this.parseOptions(options)
+
+	sb.WriteString("DELETE")
+
+	if so.table != "" {
+		sb.WriteString(" FROM ")
+		sb.WriteString(so.table)
 	}
 
-	if limit > 0 {
-		where += " limit " + strconv.Itoa(limit)
+	if so.where != "" {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(so.where)
 	}
 
-	sqlstr := "delete from " + table + " where " + where
-
-	return this.Execute(sqlstr, val...)
-} // }}}
-
-// 表达式参数
-func (this *SqlClient) getExprParam(param any) string { // {{{
-	if val, ok := param.(string); ok {
-		if strings.HasPrefix(val, "#~#") {
-			return string([]byte(val)[3:])
-		}
+	if so.order != "" {
+		sb.WriteString(" ORDER BY ")
+		sb.WriteString(so.order)
 	}
 
-	return ""
+	if so.limits != "" {
+		sb.WriteString(" LIMIT ")
+		sb.WriteString(so.limits)
+	}
+
+	return this.Execute(sb.String(), so.vals...)
 } // }}}
 
 func (this *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
-	result, err := this.execute(sqlstr, val...)
+	result, err := this.Exec(sqlstr, val...)
 	if err != nil {
 		return 0, err
 	}
@@ -467,7 +338,7 @@ func (this *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
 	return int(affect), nil
 } // }}}
 
-func (this *SqlClient) execute(sqlstr string, val ...interface{}) (result sql.Result, err error) { // {{{
+func (this *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, err error) { // {{{
 	var start_time time.Time
 	if this.Debug {
 		start_time = time.Now()
@@ -525,9 +396,14 @@ func (this *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{
 } // }}}
 
 func (this *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error) { // {{{
-	list, err := this.Query(sqlstr, vals...)
+	iter, err := this.QueryStream(sqlstr, vals...)
 	if err != nil {
-		return nil, err
+		return nil, errorHandle(err)
+	}
+
+	list, err := iter.Collect(1)
+	if err != nil {
+		return nil, errorHandle(err)
 	}
 
 	if len(list) > 0 {
@@ -552,7 +428,7 @@ func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error
 } // }}}
 
 // 返回迭代器
-func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIterator, error) { //{{{
+func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) { //{{{
 	//分析sql,如果使用了select SQL_CALC_FOUND_ROWS, 分析语句会干扰结果，所以放在真正查询的前面
 	if this.Debug {
 		this.explain(sqlstr, val...)
@@ -573,16 +449,20 @@ func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIterator, err
 		return nil, errorHandle(err)
 	}
 
-	return newRowIterator(rows)
+	return newRowIter(rows)
 } // }}}
 
-func (this *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
+func (this *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 	so := &SqlOption{}
 	for _, opt := range options {
 		opt(so)
 	}
 
-	return so.ToSql()
+	return so
+} // }}}
+
+func (this *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
+	return this.parseOptions(options).ToSql()
 } // }}}
 
 func (this *SqlClient) explain(sqlstr string, val ...any) { //{{{

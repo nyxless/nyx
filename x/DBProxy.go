@@ -14,18 +14,17 @@ import (
 )
 
 func NewDBProxy() *DBProxy {
-	return &DBProxy{c: map[string]*db.SqlClient{}}
+	return &DBProxy{c: map[string]db.DBClient{}}
 }
 
 type DBProxy struct {
 	mutex sync.RWMutex
-	c     map[string]*db.SqlClient
+	c     map[string]db.DBClient
 }
 
 type SqlDsn func(MAP) string
 
-// type NewDBFunc func() db.DBClient
-type NewDBFunc func() *db.SqlClient
+type NewDBFunc func() db.DBClient
 
 func RegisterSqlDriver(name string, dsnfunc SqlDsn, f ...NewDBFunc) {
 	dsnFuncs[name] = dsnfunc
@@ -34,7 +33,7 @@ func RegisterSqlDriver(name string, dsnfunc SqlDsn, f ...NewDBFunc) {
 	}
 }
 
-var newDBFunc NewDBFunc = db.NewSqlClient
+var newDBFunc NewDBFunc = db.NewDBClient
 
 var dsnFuncs = map[string]SqlDsn{
 	"mysql": func(conf MAP) string {
@@ -49,9 +48,9 @@ var dsnFuncs = map[string]SqlDsn{
 	},
 }
 
-func (this *DBProxy) Get(conf MAP) (*db.SqlClient, error) { // {{{
+func (this *DBProxy) Get(conf MAP) (db.DBClient, error) { // {{{
 	var err error
-	var c *db.SqlClient
+	var c db.DBClient
 
 	host, ok := conf["host"]
 	if !ok {
@@ -74,11 +73,11 @@ func (this *DBProxy) Get(conf MAP) (*db.SqlClient, error) { // {{{
 	return c, err
 } // }}}
 
-func (this *DBProxy) add(conf MAP) (*db.SqlClient, error) { // {{{
+func (this *DBProxy) add(conf MAP) (db.DBClient, error) { // {{{
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	var c *db.SqlClient
+	var c db.DBClient
 	var err error
 	var debug bool
 	var dsn string
@@ -143,9 +142,5 @@ func (this *DBProxy) add(conf MAP) (*db.SqlClient, error) { // {{{
 
 // 拼装参数时，作为可执行字符，而不是字符串值
 func Expr(param string) string { // {{{
-	if "" != param {
-		return "#~#" + param
-	}
-
-	return ""
+	return db.Expr(param)
 } // }}}

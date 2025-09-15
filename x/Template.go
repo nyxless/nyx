@@ -87,17 +87,16 @@ type Template struct {
 }
 
 // 解析模板变量
-func (this *Template) Assign(vals ...interface{}) { // {{{
+func (this *Template) Assign(vals ...any) { // {{{
 	if nil == this.vals {
 		this.vals = make(map[string]interface{})
 	}
 
 	l := len(vals)
 	if l == 1 {
-		if vals_map, ok := vals[0].(map[string]interface{}); ok {
-			for k, v := range vals_map {
-				this.vals[k] = v
-			}
+		vals_map := AsMap(vals[0])
+		for k, v := range vals_map {
+			this.vals[k] = v
 		}
 	} else {
 		i := 0

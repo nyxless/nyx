@@ -15,16 +15,16 @@ import (
 	"strings"
 )
 
+type Stream = pb.NYXRpc_CallStreamServer
+
 // 执行路由方法的函数
-type RouteRpcFunc func(map[string]any, context.Context) map[string]any
+type RouteRpcFunc func(context.Context, map[string]any, Stream) (map[string]any, error)
 
 var (
 	defaultRpcs              = [][]any{}
 	defaultRouteRpcFuncs     = map[string]map[string]RouteRpcFunc{}
 	defaultGrpcServerOptions = []grpc.ServerOption{}
 )
-
-//type Stream = pb.NYXRpc_CallStreamServer
 
 // 添加rpc 方法对应的controller实例, 支持分组
 func AddRpc(c any, groups ...string) { // {{{
@@ -117,43 +117,35 @@ type rpcHandler struct { // {{{
 	routeFuncs map[string]map[string]RouteRpcFunc //controller.action 函数缓存, 替换反射调用
 } // }}}
 
-func (this *rpcHandler) Call(ctx context.Context, in *pb.Request) (*pb.Reply, error) { // {{{
-	method := in.Method
+func (this *rpcHandler) Call(ctx context.Context, req *pb.Request) (*pb.Reply, error) { // {{{
+	res, err := this.Serve(ctx, req, nil)
+
+	return BuildReply(res), err
+} // }}}
+
+func (this *rpcHandler) CallStream(req *pb.Request, stream Stream) error { // {{{
+	ctx := stream.Context()
+	_, err := this.Serve(ctx, req, stream)
+
+	return err
+} // }}}
+
+func (this *rpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stream) (res map[string]any, err error) { // {{{
+	requesturi := req.Method
 
 	params := map[string]any{}
-	for k, v := range in.Keys {
-		if in.Types[k] == "BYTES" {
-			params[v] = in.Values[k]
+	for k, v := range req.Keys {
+		if req.Types[k] == "BYTES" {
+			params[v] = req.Values[k]
 		} else {
-			params[v] = string(in.Values[k])
+			params[v] = string(req.Values[k])
 		}
 	}
 
-	res := this.Serve(method, params, ctx)
-
-	return this.buildReply(res), nil
-} // }}}
-/*
-	func (s *server) CallStream(req *pb.Request, stream pb.NYXRpc_CallStreamServer) error {
-		log.Printf("Received CallStream request: %v", req.GetMessage())
-
-		// 发送多个响应
-		for i := 0; i < 5; i++ {
-			if err := stream.Send(&pb.Reply{
-				Message: fmt.Sprintf("Stream response %d to: %s", i+1, req.GetMessage()),
-			}); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}
-*/
-func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx context.Context) (res map[string]any) { // {{{
 	defer func() {
-		if err := recover(); err != nil {
+		if recover_err := recover(); recover_err != nil {
 			var errmsg string
-			switch errinfo := err.(type) {
+			switch errinfo := recover_err.(type) {
 			case *Error:
 				errmsg = errinfo.GetMessage()
 			case *Errorf:
@@ -188,7 +180,7 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 	// 先尝试执行预生成函数代码
 	if cf, ok := this.routeFuncs[controller_name]; ok {
 		if f, ok := cf[action_name]; ok {
-			return f(params, ctx)
+			return f(ctx, params, stream)
 		}
 	}
 
@@ -214,8 +206,8 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 	var method reflect.Value
 
 	defer func() {
-		if err := recover(); err != nil {
-			in = []reflect.Value{reflect.ValueOf(err)}
+		if recover_err := recover(); recover_err != nil {
+			in = []reflect.Value{reflect.ValueOf(recover_err)}
 			method := vc.Method(this.methodMap[controller_name]["RenderError"])
 			method.Call(in)
 
@@ -223,15 +215,17 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 			method = vc.Method(this.methodMap[controller_name]["GetRpcContent"])
 			ret := method.Call(in)
 			res = ret[0].Interface().(map[string]any) //res = ret[0].Bytes()
+			err = ret[1].Interface().(error)
 		}
 	}()
 
 	in = make([]reflect.Value, 5)
-	in[0] = reflect.ValueOf(params)
-	in[1] = reflect.ValueOf(ctx)
+	in[0] = reflect.ValueOf(ctx)
+	in[1] = reflect.ValueOf(params)
 	in[2] = reflect.ValueOf(controller_name)
 	in[3] = reflect.ValueOf(action_name)
 	in[4] = reflect.ValueOf(group)
+	in[5] = reflect.ValueOf(stream)
 	method = vc.Method(this.methodMap[controller_name]["PrepareRpc"])
 	method.Call(in)
 
@@ -248,6 +242,7 @@ func (this *rpcHandler) Serve(requesturi string, params map[string]any, ctx cont
 	method = vc.Method(this.methodMap[controller_name]["GetRpcContent"])
 	ret := method.Call(in)
 	res = ret[0].Interface().(map[string]any)
+	err = ret[1].Interface().(error)
 
 	return
 } // }}}
@@ -290,7 +285,7 @@ func (this *rpcHandler) addController(c any, group ...string) { // {{{
 
 } // }}}
 
-func (this *rpcHandler) buildReply(res map[string]any) *pb.Reply { // {{{
+func BuildReply(res map[string]any) *pb.Reply { // {{{
 	var reply_data *pb.ReplyData
 	keys := map[int32]string{}
 	types := map[int32]string{}

@@ -3,9 +3,10 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
-type RowIterator struct {
+type RowIter struct {
 	rows     *sql.Rows
 	cols     []string
 	scanArgs []any
@@ -14,7 +15,7 @@ type RowIterator struct {
 }
 
 // 私有方法,  由QueryStream 调用
-func newRowIterator(rows *sql.Rows) (*RowIterator, error) { // {{{
+func newRowIter(rows *sql.Rows) (*RowIter, error) { // {{{
 	cols, err := rows.Columns()
 	if err != nil {
 		rows.Close()
@@ -27,7 +28,7 @@ func newRowIterator(rows *sql.Rows) (*RowIterator, error) { // {{{
 		scanArgs[i] = &values[i]
 	}
 
-	return &RowIterator{
+	return &RowIter{
 		rows:     rows,
 		cols:     cols,
 		scanArgs: scanArgs,
@@ -36,14 +37,24 @@ func newRowIterator(rows *sql.Rows) (*RowIterator, error) { // {{{
 } // }}}
 
 // 遍历每行数据，直到处理完所有行或回调返回错误
-func (it *RowIterator) Foreach(fn func(map[string]any) error) error { // {{{
+func (it *RowIter) Foreach(fn func(map[string]any) error, limits ...int) error { // {{{
 	if it.closed {
 		return errorHandle(fmt.Errorf("iterator is already closed"))
 	}
 
+	limit := 0
+	if len(limits) > 0 {
+		limit = limits[0]
+	}
+
 	defer it.Close()
 
+	num := 0
 	for it.rows.Next() {
+		if limit > 0 && num >= limit {
+			return nil
+		}
+
 		// 重置values
 		for i := range it.values {
 			it.values[i] = nil
@@ -55,25 +66,34 @@ func (it *RowIterator) Foreach(fn func(map[string]any) error) error { // {{{
 
 		row := make(map[string]any, len(it.cols))
 		for i, col := range it.values {
+			colkey := it.cols[i]
+			//处理返回多表字段时，字段名带前缀的问题
+			li := strings.LastIndex(colkey, ".")
+			if li > -1 {
+				colkey = colkey[li+1:]
+			}
+
 			if col == nil {
-				row[it.cols[i]] = ""
+				row[colkey] = ""
 			} else if colval, ok := col.(sql.RawBytes); ok {
-				row[it.cols[i]] = string(colval)
+				row[colkey] = string(colval)
 			} else {
-				row[it.cols[i]] = col
+				row[colkey] = col
 			}
 		}
 
 		if err := fn(row); err != nil {
 			return errorHandle(err)
 		}
+
+		num++
 	}
 
 	return errorHandle(it.rows.Err())
 } // }}}
 
 // 收集所有行数据到切片中
-func (it *RowIterator) Collect() ([]map[string]any, error) { // {{{
+func (it *RowIter) Collect(limits ...int) ([]map[string]any, error) { // {{{
 	if it.closed {
 		return nil, errorHandle(fmt.Errorf("iterator is already closed"))
 	}
@@ -86,7 +106,7 @@ func (it *RowIterator) Collect() ([]map[string]any, error) { // {{{
 		return nil
 	}
 
-	if err := it.Foreach(collectFn); err != nil {
+	if err := it.Foreach(collectFn, limits...); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +114,7 @@ func (it *RowIterator) Collect() ([]map[string]any, error) { // {{{
 } // }}}
 
 // 释放数据库资源
-func (it *RowIterator) Close() error { // {{{
+func (it *RowIter) Close() error { // {{{
 	if it.closed {
 		return nil
 	}

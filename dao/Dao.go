@@ -1,9 +1,7 @@
 package dao
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
 	"github.com/nyxless/nyx/x"
 	"github.com/nyxless/nyx/x/db"
@@ -12,7 +10,7 @@ import (
 )
 
 type Dao struct {
-	DBWriter, DBReader *db.SqlClient
+	DBWriter, DBReader db.DBClient
 	table              string
 	primary            string
 	defaultFields      string //默认字段,逗号分隔
@@ -39,26 +37,31 @@ type JoinOn struct {
 	OnPairs []*OnPair
 }
 type OnPair struct {
-	Left  string
-	Right string
-	On    bool
+	Left    string
+	Right   string
+	Compare string
 }
 
 func (j *JoinOn) On(left_field string, right_fields ...string) *JoinOn {
-	return j.on(true, left_field, right_fields...)
+	return j.on("=", left_field, right_fields...)
 }
 
 func (j *JoinOn) NotOn(left_field string, right_fields ...string) *JoinOn {
-	return j.on(false, left_field, right_fields...)
+	return j.on("!=", left_field, right_fields...)
 }
 
-func (j *JoinOn) on(on bool, left_field string, right_fields ...string) *JoinOn { // {{{
+// compare: 比较符号
+func (j *JoinOn) CompareOn(compare, left_field string, right_fields ...string) *JoinOn { // {{{
+	return j.on(compare, left_field, right_fields...)
+} // }}}
+
+func (j *JoinOn) on(compare, left_field string, right_fields ...string) *JoinOn { // {{{
 	right_field := left_field
 	if len(right_fields) > 0 {
 		right_field = right_fields[0]
 	}
 
-	j.OnPairs = append(j.OnPairs, &OnPair{left_field, right_field, on})
+	j.OnPairs = append(j.OnPairs, &OnPair{left_field, right_field, compare})
 
 	return j
 } // }}}
@@ -113,7 +116,7 @@ func (this *Dao) Init(conf_name ...string) { //{{{
 	}
 } // }}}
 
-func (this *Dao) InitTx(tx *db.SqlClient) { //使用事务{{{
+func (this *Dao) InitTx(tx db.DBClient) { //使用事务{{{
 	this.defaultFields = "*"
 	this.filterValues = []any{}
 	this.autoOrder = true
@@ -300,23 +303,28 @@ func (this *Dao) InnerJoin(inner_join ...*JoinOn) *Dao { // {{{
 } // }}}
 
 func (this *Dao) On(left_field string, right_fields ...string) *JoinOn { // {{{
-	return this.on(true, left_field, right_fields...)
+	return this.on("=", left_field, right_fields...)
 } // }}}
 
 func (this *Dao) NotOn(left_field string, right_fields ...string) *JoinOn { // {{{
-	return this.on(false, left_field, right_fields...)
+	return this.on("!=", left_field, right_fields...)
 } // }}}
 
-func (this *Dao) on(on bool, left_field string, right_fields ...string) *JoinOn { // {{{
+// compare: 比较符号
+func (this *Dao) CompareOn(compare, left_field string, right_fields ...string) *JoinOn { // {{{
+	return this.on(compare, left_field, right_fields...)
+} // }}}
+
+func (this *Dao) on(compare, left_field string, right_fields ...string) *JoinOn { // {{{
 	right_field := left_field
 	if len(right_fields) > 0 {
 		right_field = right_fields[0]
 	}
 
-	return &JoinOn{this, []*OnPair{&OnPair{left_field, right_field, on}}}
+	return &JoinOn{this, []*OnPair{&OnPair{left_field, right_field, compare}}}
 } // }}}
 
-func (this *Dao) GetDBReader() *db.SqlClient { // {{{
+func (this *Dao) GetDBReader() db.DBClient { // {{{
 	if this.forceMaster {
 		this.forceMaster = false
 
@@ -425,7 +433,7 @@ func (this *Dao) Query(sql string, params ...any) ([]map[string]any, error) { //
 } // }}}
 
 // 返回迭代器
-func (this *Dao) QueryStream(sql string, params ...any) (*db.RowIterator, error) { //{{{
+func (this *Dao) QueryStream(sql string, params ...any) (*db.RowIter, error) { //{{{
 	return this.GetDBReader().QueryStream(sql, params...)
 } // }}}
 
@@ -484,12 +492,18 @@ func (this *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 
 	}, sqlOptions)
 
-	return res.(map[string]any), err
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(map[string]any), nil
 } // }}}
 
-func parseJoinOn(alias string, joinons []*JoinOn) string { // {{{
-	var join string
+func parseJoinOn(alias string, joinons []*JoinOn) []string { // {{{
+	var joins []string
 	for _, v := range joinons {
+		var join string
+
 		tbl := v.JoinDao.GetTable()
 		al := v.JoinDao.getAlias()
 		join += tbl + " " + al
@@ -504,36 +518,54 @@ func parseJoinOn(alias string, joinons []*JoinOn) string { // {{{
 			}
 
 			on := "="
-			if !p.On {
-				on = "!="
+			if p.Compare != "" {
+				on = p.Compare
 			}
 
 			join += alias + "." + p.Left + on + al + "." + p.Right
 		}
+
+		joins = append(joins, join)
 	}
 
-	return join
+	return joins
 } // }}}
 
 // 按主键删除数据
 func (this *Dao) DelRecord(id any) (int, error) { //{{{
-	return this.DBWriter.Delete(this.table, "", 1, this.primary+"=?", id)
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithWhere(this.primary+"=?", []any{id}),
+		db.WithLimits("1"),
+	}
+
+	return this.DBWriter.Delete(sqlOptions...)
 } // }}}
 
 // 删除符合条件的数据 (一条)
 func (this *Dao) DelRecordBy(params ...any) (int, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	order := this.getOrder(false)
 
-	return this.DBWriter.Delete(this.table, order, 1, where, values...)
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithOrder(this.getOrder(false)),
+		db.WithWhere(this.getFilter()),
+		db.WithLimits("1"),
+	}
+
+	return this.DBWriter.Delete(sqlOptions...)
 } // }}}
 
 // 删除所有符合条件的数据 (Is Dangerous!)
 func (this *Dao) DelRecords(params ...any) (int, error) { //{{{
 	this.SetFilter(params...)
-	where, values := this.getFilter()
-	return this.DBWriter.Delete(this.table, "", 0, where, values...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(this.table),
+		db.WithWhere(this.getFilter()),
+	}
+
+	return this.DBWriter.Delete(sqlOptions...)
 } // }}}
 
 func (this *Dao) GetOne(field string, params ...any) (any, error) { //{{{
@@ -591,6 +623,10 @@ func (this *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 
 	}, sqlOptions)
 
+	if err != nil {
+		return nil, err
+	}
+
 	return res.([]any), err
 } // }}}
 
@@ -618,6 +654,10 @@ func (this *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any
 		return 0, x.ArrayColumnMap(list, valfield, keyfield), nil
 
 	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return res.(map[any]any), err
 } // }}}
@@ -699,6 +739,10 @@ func (this *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 
 	}, sqlOptions)
 
+	if err != nil {
+		return nil, err
+	}
+
 	return res.(map[string]any), err
 
 } // }}}
@@ -735,6 +779,10 @@ func (this *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 		return 0, res, err
 
 	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return res.([]map[string]any), err
 } // }}}
@@ -825,6 +873,10 @@ func (this *Dao) GetList(params ...any) (int, []map[string]any, error) { //{{{
 
 	}, sqlOptions)
 
+	if err != nil {
+		return 0, nil, err
+	}
+
 	return num, res.([]map[string]any), err
 
 } // }}}
@@ -857,25 +909,13 @@ func (this *Dao) getFromCache(key []byte) (int, any, bool) { // {{{
 	}
 
 	var cache_data *cacheData
-	decoder := gob.NewDecoder(bytes.NewReader(got))
-	err = decoder.Decode(&cache_data)
-	if err != nil {
-		return 0, nil, false
-	}
+	x.JsonUnmarshal(got, &cache_data)
 
-	return cache_data.num, cache_data.res, true
+	return cache_data.Num, cache_data.Res, true
 } // }}}
 
 func (this *Dao) setCache(key []byte, num int, res any, ttl int) error { // {{{
-	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-	err := encoder.Encode(&cacheData{num, res})
-	if err != nil {
-		return err
-	}
-
-	encodedData := buf.Bytes()
-
+	encodedData := x.JsonEncodeToBytes(&cacheData{num, res})
 	return x.LocalCache.Set(key, encodedData, ttl)
 } // }}}
 
@@ -884,12 +924,31 @@ func (this *Dao) getCacheKey(opts []db.FnSqlOption) []byte { // {{{
 	for _, opt := range opts {
 		opt(so)
 	}
-	sql, vals := so.ToSql()
 
 	var sb strings.Builder
-	sb.WriteString(sql)
-	for _, v := range vals {
-		sb.WriteString(" ")
+
+	sb.WriteString(so.GetFields())
+	sb.WriteString("#")
+	sb.WriteString(so.GetTable())
+	sb.WriteString("#")
+	sb.WriteString(so.GetAlias())
+	sb.WriteString("#")
+	sb.WriteString(so.GetIdx())
+	sb.WriteString("#")
+	sb.WriteString(strings.Join(so.GetLeftJoin(), ","))
+	sb.WriteString("#")
+	sb.WriteString(strings.Join(so.GetInnerJoin(), ","))
+	sb.WriteString("#")
+	sb.WriteString(so.GetWhere())
+	sb.WriteString("#")
+	sb.WriteString(so.GetGroup())
+	sb.WriteString("#")
+	sb.WriteString(so.GetOrder())
+	sb.WriteString("#")
+	sb.WriteString(so.GetLimits())
+
+	for _, v := range so.GetVals() {
+		sb.WriteString(",")
 		sb.WriteString(x.AsString(v))
 	}
 
@@ -897,6 +956,6 @@ func (this *Dao) getCacheKey(opts []db.FnSqlOption) []byte { // {{{
 } // }}}
 
 type cacheData struct {
-	num int
-	res any
+	Num int
+	Res any
 }

@@ -2,6 +2,7 @@ package x
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	json "github.com/bytedance/sonic" //"encoding/json"
 	"io"
@@ -238,12 +239,34 @@ func JsonDecode(data any) any { // {{{
 	return convertFloat(obj)
 } // }}}
 
+func JsonUnmarshal(data any, obj any) error { // {{{
+	return json.Unmarshal(AsBytes(data), obj)
+} // }}}
+
 func GetJsonEncoder(w io.Writer) json.Encoder { // {{{
 	return json.ConfigDefault.NewEncoder(w)
 } // }}}
 
 func GetJsonDecoder(w io.Reader) json.Decoder { // {{{
 	return json.ConfigDefault.NewDecoder(w)
+} // }}}
+
+func GobEncode(data any) ([]byte, error) { // {{{
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+} // }}}
+
+func GobDecode(data []byte, obj any) error { // {{{
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+
+	return decoder.Decode(obj)
 } // }}}
 
 // 格式化科学法表示的数字

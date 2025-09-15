@@ -8,7 +8,7 @@ func NowTime() time.Time { // {{{
 	return time.Now()
 } // }}}
 
-// unix时间戳
+// int 类型 unix时间戳
 func Now() int { // {{{
 	return int(time.Now().Unix())
 } // }}}
@@ -35,17 +35,17 @@ func Date(times ...any) string { // {{{
 	return FormatTime("2006-01-02", times...)
 } // }}}
 
-// 返回`2013-01-20 10` 小时整点格式的时间, 可以指定时间戳，默认当前时间
+// 返回2006-01-02 15 小时整点格式的时间, 可以指定时间戳，默认当前时间
 func DateHour(times ...any) string { // {{{
 	return FormatTime("2006-01-02 15", times...)
 } // }}}
 
-// 返回`2013-01-20 10:20` 分钟整点格式的时间, 可以指定时间戳，默认当前时间
+// 返回2006-01-02 15:04 分钟整点格式的时间, 可以指定时间戳，默认当前时间
 func DateMin(times ...any) string { // {{{
 	return FormatTime("2006-01-02 15:04", times...)
 } // }}}
 
-// 返回2013-01-20 10:20:01 格式的时间, 可以指定时间戳，默认当前时间
+// 返回2006-01-02 15:04:05 格式的时间, 可以指定时间戳，默认当前时间
 func DateTime(times ...any) string { // {{{
 	return FormatTime("2006-01-02 15:04:05", times...)
 } // }}}
