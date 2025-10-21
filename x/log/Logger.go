@@ -282,6 +282,14 @@ func (l *Logger) processLogs() { // {{{
 	for {
 		select {
 		case <-l.stopChan:
+			// 处理队列中未处理完的数据
+			for len(l.queue) > 0 {
+				bulk := <-l.queue
+				l.prepareWrite(bulk.GetEntrys()...)
+				PutBulk(bulk)
+			}
+
+			// 处理未进入队列的数据
 			l.prepareWrite(l.bulk.GetEntrys()...)
 			PutBulk(l.bulk)
 			l.bulk = nil
@@ -617,7 +625,7 @@ func (l *Logger) Close() { // {{{
 		return // 已经关闭
 	}
 
-	//fmt.Println("log close")
+	fmt.Println("logger close")
 	//l.buffer.Close()
 
 	close(l.stopChan)

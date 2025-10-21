@@ -170,9 +170,9 @@ func GetIp(r *http.Request) string { // {{{
 	}
 
 	//去除端口号
-	ips := strings.Split(ip, ":")
-	if len(ips) > 0 {
-		ip = ips[0]
+	ip_prefix, _, found := strings.Cut(ip, ":")
+	if found {
+		return ip_prefix
 	}
 
 	return ip

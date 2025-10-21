@@ -382,7 +382,7 @@ func (srv *endlessServer) handleSignals() { // {{{
 		case syscall.SIGINT:
 			if DevMode { //开发模式ctrl+c 直接退出，不用等待未完成的请求
 				log.Println("dev mode open, exit without wait!")
-				DefaultHammerTime = 1
+				DefaultHammerTime = 1 * time.Second
 			}
 			log.Println(pid, "Received SIGINT.")
 

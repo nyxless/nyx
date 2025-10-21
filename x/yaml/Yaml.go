@@ -1,5 +1,10 @@
 package yaml
 
+/*
+* 支持 !include 标签
+* 支持 使用环境变量, 格式: ${ENV_VAR_NAME}
+ */
+
 import (
 	"bufio"
 	"bytes"
@@ -8,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -211,5 +217,47 @@ func (y *Yaml) YamlToMap() (map[string]any, error) { // {{{
 		return nil, fmt.Errorf("Error processing YAML: %v\n", err)
 	}
 
+	for k, v := range m {
+		m[k] = convertEnv(v)
+	}
+
 	return m, nil
+} // }}}
+
+// 转换环境变量
+func convertEnv(r any) any { // {{{
+	switch val := r.(type) {
+	case map[string]any:
+		s := map[string]any{}
+		for k, v := range val {
+			s[k] = convertEnv(v)
+		}
+		return s
+	case []any:
+		s := []any{}
+		for _, v := range val {
+			s = append(s, convertEnv(v))
+		}
+		return s
+	case string:
+		val = strings.TrimSpace(val)
+
+		envRe := regexp.MustCompile(`(?i)\$\{([^}]*?)\}`)
+		envMatch := envRe.FindAllStringSubmatch(val, -1)
+		for _, match := range envMatch {
+			env := match[1]
+			env_pairs := strings.SplitN(env, ":", 2)
+			env_key := env_pairs[0]
+			env_val := os.Getenv(env_key)
+			if env_val == "" && len(env_pairs) > 1 {
+				env_val = env_pairs[1]
+			}
+
+			val = strings.ReplaceAll(val, "${"+env_key+"}", env_val)
+		}
+
+		return val
+	default:
+		return r
+	}
 } // }}}
