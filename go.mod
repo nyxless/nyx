@@ -9,7 +9,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coocood/freecache v1.2.4
 	github.com/go-sql-driver/mysql v1.9.2
-	github.com/nyxless/nyxc v0.0.0
 	github.com/redis/go-redis/v9 v9.8.0
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0
