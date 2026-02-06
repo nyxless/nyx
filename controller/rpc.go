@@ -30,7 +30,3 @@ func (r *RPC) Prepare(ctx context.Context, params x.MAP, controller, action, gro
 	r.SetHeader(x.ConfLangKey, lang)
 
 } // }}}
-
-// 用户回调方法, 可在业务代码中重写
-func (r *RPC) Final() { // {{{
-} // }}}

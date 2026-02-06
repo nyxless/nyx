@@ -40,13 +40,13 @@ func NewNyx() *Nyx {
 	return nyx
 }
 
-func (this *Nyx) Init() { // {{{
-	this.printLogo()
-	this.envInit()
-	this.genPidFile()
+func (n *Nyx) Init() { // {{{
+	n.printLogo()
+	n.envInit()
+	n.genPidFile()
 } // }}}
 
-func (this *Nyx) printLogo() { // {{{
+func (n *Nyx) printLogo() { // {{{
 	logo := `
        _/      _/  _/      _/  _/      _/   
       _/_/    _/    _/  _/      _/  _/
@@ -61,7 +61,7 @@ func (this *Nyx) printLogo() { // {{{
 } // }}}
 
 // 初始化
-func (this *Nyx) envInit() { // {{{
+func (n *Nyx) envInit() { // {{{
 	var config_file, mode, uri, params string
 	var debug bool
 
@@ -99,15 +99,15 @@ func (this *Nyx) envInit() { // {{{
 	x.Conf = config
 
 	if mode != "" {
-		this.Mode = strings.Split(mode, ",")
+		n.Mode = strings.Split(mode, ",")
 	}
 
 	if uri != "" {
-		this.cliPath = uri
+		n.cliPath = uri
 	}
 
 	if params != "" {
-		this.cliParams = params
+		n.cliParams = params
 	}
 
 	if time_zone := x.Conf.GetString("time_zone"); time_zone != "" {
@@ -115,17 +115,17 @@ func (this *Nyx) envInit() { // {{{
 	}
 
 	// 缓存配置文件变量(框架中用到的)
-	this.cacheConf()
+	n.cacheConf()
 
 	// 初始化日志
-	err = this.useLogger()
+	err = n.useLogger()
 	if nil != err {
 		x.Println("Error: ", err)
 		os.Exit(0)
 	}
 
 	// 初始化本地缓存
-	this.useLocalCache()
+	n.useLocalCache()
 
 	x.Info("Run Cmd: ", os.Args)
 	if x.Debug {
@@ -135,7 +135,7 @@ func (this *Nyx) envInit() { // {{{
 } // }}}
 
 // 加载 http 中间件
-func (this *Nyx) useHttpMiddlewares() { // {{{
+func (n *Nyx) useHttpMiddlewares() { // {{{
 	// 加载 http Cors 中间件
 	if x.Conf.GetDefBool(false, "cors", "enabled") { // {{{
 		opts := &middleware.CorsOptions{
@@ -224,7 +224,7 @@ func (this *Nyx) useHttpMiddlewares() { // {{{
 } // }}}
 
 // 加载 rpc 中间件
-func (this *Nyx) useRpcMiddlewares() { // {{{
+func (n *Nyx) useRpcMiddlewares() { // {{{
 	// 加载 rpc auth 中间件
 	if x.Conf.GetDefBool(false, "auth", "rpc_check", "enabled") { // {{{
 		allowed_groups := x.Conf.GetDefStringSlice([]string{}, "auth", "rpc_check", "allowed_groups")
@@ -282,7 +282,7 @@ func (this *Nyx) useRpcMiddlewares() { // {{{
 } // }}}
 
 // 缓存配置文件变量
-func (this *Nyx) cacheConf() { // {{{
+func (n *Nyx) cacheConf() { // {{{
 	x.ConfEnvMode = x.Conf.GetString("env_mode")
 	x.ConfGuidKey = x.Conf.GetDefString("guid", "guid_key")
 	x.ConfLangKey = x.Conf.GetDefString("lang", "lang_key")
@@ -295,12 +295,12 @@ func (this *Nyx) cacheConf() { // {{{
 	x.ConfDefaultController = strings.ToLower(x.Conf.GetDefString("index", "default_controller"))
 	x.ConfDefaultAction = strings.ToLower(x.Conf.GetDefString("index", "default_action"))
 
-	this.parseRouter()
-	this.parseErrMsg()
+	n.parseRouter()
+	n.parseErrMsg()
 } // }}}
 
 // 解析转换url路由配置
-func (this *Nyx) parseRouter() { // {{{
+func (n *Nyx) parseRouter() { // {{{
 	//prefix := strings.Trim(x.Conf.GetString("url_route", "prefix"), " \r\t\v/")
 	routes := x.Conf.GetMapSlice("url_route")
 
@@ -313,7 +313,6 @@ func (this *Nyx) parseRouter() { // {{{
 		if !x.AsBool(route["enabled"], true) {
 			continue
 		}
-
 		prefix := ""
 		if _prefix, ok := route["prefix"]; ok {
 			prefix = strings.Trim(x.AsString(_prefix), " \r\t\v/")
@@ -447,7 +446,7 @@ func (this *Nyx) parseRouter() { // {{{
 } // }}}
 
 // 解析 err_msg
-func (this *Nyx) parseErrMsg() { // {{{
+func (n *Nyx) parseErrMsg() { // {{{
 	x.DEFAULT_LANG = x.Conf.GetDefString("CN", "default_lang")
 
 	x.ErrMapRo = x.MapMerge(x.ErrMapRo, x.ErrMap)
@@ -459,7 +458,7 @@ func (this *Nyx) parseErrMsg() { // {{{
 } // }}}
 
 // 初始化日志
-func (this *Nyx) useLogger() error { // {{{
+func (n *Nyx) useLogger() error { // {{{
 	log_enabled := x.Conf.GetDefBool(true, "log", "enabled")
 	if !log_enabled {
 		return nil
@@ -542,7 +541,7 @@ func (this *Nyx) useLogger() error { // {{{
 } // }}}
 
 // 初始化本地缓存
-func (this *Nyx) useLocalCache() { // {{{
+func (n *Nyx) useLocalCache() { // {{{
 	localcache_enabled := x.Conf.GetDefBool(false, "localcache", "enabled")
 	localcache_size := x.Conf.GetDefInt(100*1024*1024, "localcache", "size") //100M
 	if localcache_enabled {
@@ -575,32 +574,32 @@ func AddGrpcServerOption(o ...grpc.ServerOption) {
 	x.AddGrpcServerOption(o...)
 }
 
-func (this *Nyx) RunTcp() {
-	this.run(SERVER_TCP)
+func (n *Nyx) RunTcp() {
+	n.run(SERVER_TCP)
 }
 
-func (this *Nyx) RunWs() {
-	this.run(SERVER_WS)
+func (n *Nyx) RunWs() {
+	n.run(SERVER_WS)
 }
 
-func (this *Nyx) RunRpc() {
-	this.run(SERVER_RPC)
+func (n *Nyx) RunRpc() {
+	n.run(SERVER_RPC)
 }
 
-func (this *Nyx) RunHttp() {
-	this.run(SERVER_HTTP)
+func (n *Nyx) RunHttp() {
+	n.run(SERVER_HTTP)
 }
 
-func (this *Nyx) RunCli() {
-	this.run(SERVER_CLI)
+func (n *Nyx) RunCli() {
+	n.run(SERVER_CLI)
 }
 
 // 支持命令行参数 -m 指定运行模式
-func (this *Nyx) Run() {
-	this.run(this.Mode...)
+func (n *Nyx) Run() {
+	n.run(n.Mode...)
 }
 
-func (this *Nyx) run(modes ...string) { // {{{
+func (n *Nyx) run(modes ...string) { // {{{
 	defer func() {
 		x.Redis.Close()
 		x.DB.Close()
@@ -611,7 +610,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 			x.Logger.Close()
 		}
 
-		this.removePidFile()
+		n.removePidFile()
 
 		x.Warn("======= Server Exit: " + x.DateTime() + " " + x.TIME_ZONE + " ======")
 	}()
@@ -627,7 +626,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 
 		switch mode {
 		case "http":
-			this.useHttpMiddlewares()
+			n.useHttpMiddlewares()
 
 			wg.Add(1)
 			go func() {
@@ -646,7 +645,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 			}()
 
 		case "rpc":
-			this.useRpcMiddlewares()
+			n.useRpcMiddlewares()
 			monitor_port = x.Conf.GetString("rpc_server", "monitor_port")
 
 			wg.Add(1)
@@ -690,7 +689,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				x.NewCliServer(this.cliPath, this.cliParams).Run()
+				x.NewCliServer(n.cliPath, n.cliParams).Run()
 			}()
 
 		default:
@@ -711,7 +710,7 @@ func (this *Nyx) run(modes ...string) { // {{{
 } // }}}
 
 // 生成pid文件
-func (this *Nyx) genPidFile() { // {{{
+func (n *Nyx) genPidFile() { // {{{
 	pid := os.Getpid()
 	ioutil.WriteFile(x.Conf.GetDefString("./pid", "app_pid_file"), x.AsBytes(pid), 0777)
 
@@ -719,6 +718,6 @@ func (this *Nyx) genPidFile() { // {{{
 } // }}}
 
 // 删除pid文件
-func (this *Nyx) removePidFile() {
+func (n *Nyx) removePidFile() {
 	os.Remove(x.Conf.GetDefString("./pid", "app_pid_file"))
 }

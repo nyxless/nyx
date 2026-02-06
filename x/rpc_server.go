@@ -87,8 +87,8 @@ type RpcServer struct {
 	handler     *grpcHandler
 }
 
-func (this *RpcServer) Run() { // {{{
-	if len(this.handler.routeMap) == 0 {
+func (rs *RpcServer) Run() { // {{{
+	if len(rs.handler.routeMap) == 0 {
 		Warn("rpc controller not found, pls add controller using func `AddRpc` or shell `nyx init`")
 
 		return
@@ -96,16 +96,16 @@ func (this *RpcServer) Run() { // {{{
 
 	//runtime.GOMAXPROCS(runtime.NumCPU())
 	rpcServer := grpc.NewServer(defaultGrpcServerOptions...)
-	pb.RegisterNYXRpcServer(rpcServer, this.handler)
+	pb.RegisterNYXRpcServer(rpcServer, rs.handler)
 
-	addr := fmt.Sprintf("%s:%d", this.addr, this.port)
+	addr := fmt.Sprintf("%s:%d", rs.addr, rs.port)
 	Info("RpcServer Listen: ", addr)
 
-	if this.useGraceful {
+	if rs.useGraceful {
 		Info("Use graceful: ", "open")
 		Warn(endless.ListenAndServeTcp(addr, "", rpcServer))
 	} else {
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", this.port))
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", rs.port))
 
 		if err != nil {
 			Warn(err)
@@ -124,20 +124,20 @@ type grpcHandler struct { // {{{
 	groupHandlers map[string]RpcHandler              //group buildRpcMiddlewares 后的函数缓存
 } // }}}
 
-func (this *grpcHandler) Call(ctx context.Context, req *pb.Request) (*pb.Reply, error) { // {{{
-	_, res, err := this.Serve(ctx, req, nil)
+func (g *grpcHandler) Call(ctx context.Context, req *pb.Request) (*pb.Reply, error) { // {{{
+	_, res, err := g.Serve(ctx, req, nil)
 
 	return BuildReply(res), err
 } // }}}
 
-func (this *grpcHandler) CallStream(req *pb.Request, stream Stream) error { // {{{
+func (g *grpcHandler) CallStream(req *pb.Request, stream Stream) error { // {{{
 	ctx := stream.Context()
-	_, _, err := this.Serve(ctx, req, stream)
+	_, _, err := g.Serve(ctx, req, stream)
 
 	return err
 } // }}}
 
-func (this *grpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stream) (newctx context.Context, res *ResponseData, err error) { // {{{
+func (g *grpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stream) (newctx context.Context, res *ResponseData, err error) { // {{{
 	newctx = ctx
 	requesturi := req.Method
 
@@ -189,23 +189,23 @@ func (this *grpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stre
 	ctx = context.WithValue(ctx, "action", action_name)
 
 	//路由解析之后加载中间件
-	if hd, ok := this.groupHandlers[group]; ok {
+	if hd, ok := g.groupHandlers[group]; ok {
 		return hd(ctx, params, stream)
 	} else {
-		return this.defaultHandler(ctx, params, stream)
+		return g.defaultHandler(ctx, params, stream)
 	}
 
 	return
 } // }}}
 
-func (this *grpcHandler) defaultHandler(ctx context.Context, params map[string]any, stream Stream) (newctx context.Context, res *ResponseData, err error) { // {{{
+func (g *grpcHandler) defaultHandler(ctx context.Context, params map[string]any, stream Stream) (newctx context.Context, res *ResponseData, err error) { // {{{
 	newctx = ctx
 	group := ctx.Value("group").(string)
 	controller_name := ctx.Value("controller").(string)
 	action_name := ctx.Value("action").(string)
 
 	// 先尝试执行预生成函数代码
-	if cf, ok := this.routeFuncs[controller_name]; ok {
+	if cf, ok := g.routeFuncs[controller_name]; ok {
 		if f, ok := cf[action_name]; ok {
 			return f(ctx, params, stream)
 		}
@@ -214,7 +214,7 @@ func (this *grpcHandler) defaultHandler(ctx context.Context, params map[string]a
 	canhandler := false
 	var controllerType reflect.Type
 	if controller_name != "" && action_name != "" {
-		if routMapSub, ok := this.routeMap[controller_name]; ok {
+		if routMapSub, ok := g.routeMap[controller_name]; ok {
 			if controllerType, ok = routMapSub[action_name]; ok {
 				canhandler = true
 			}
@@ -233,18 +233,18 @@ func (this *grpcHandler) defaultHandler(ctx context.Context, params map[string]a
 	defer func() {
 		if recover_err := recover(); recover_err != nil {
 			in = []reflect.Value{reflect.ValueOf(recover_err)}
-			method := vc.Method(this.methodMap[controller_name]["RenderError"])
+			method := vc.Method(g.methodMap[controller_name]["RenderError"])
 			method.Call(in)
 
 			in = make([]reflect.Value, 0)
-			method = vc.Method(this.methodMap[controller_name]["GetResponseData"])
+			method = vc.Method(g.methodMap[controller_name]["GetResponseData"])
 			ret := method.Call(in)
 			res, _ = ret[0].Interface().(*ResponseData) //res = ret[0].Bytes()
 			err, _ = ret[1].Interface().(error)
 		}
 
 		in = make([]reflect.Value, 0)
-		method = vc.Method(this.methodMap[controller_name]["Final"])
+		method = vc.Method(g.methodMap[controller_name]["Final"])
 		method.Call(in)
 	}()
 
@@ -260,20 +260,20 @@ func (this *grpcHandler) defaultHandler(ctx context.Context, params map[string]a
 		in[5] = reflect.ValueOf(stream)
 	}
 
-	method = vc.Method(this.methodMap[controller_name]["Prepare"])
+	method = vc.Method(g.methodMap[controller_name]["Prepare"])
 	method.Call(in)
 
 	//call Init method if exists
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.methodMap[controller_name]["Init"])
+	method = vc.Method(g.methodMap[controller_name]["Init"])
 	method.Call(in)
 
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.methodMap[controller_name][action_name])
+	method = vc.Method(g.methodMap[controller_name][action_name])
 	method.Call(in)
 
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.methodMap[controller_name]["GetResponseData"])
+	method = vc.Method(g.methodMap[controller_name]["GetResponseData"])
 	ret := method.Call(in)
 	res, _ = ret[0].Interface().(*ResponseData)
 	err, _ = ret[1].Interface().(error)
@@ -282,28 +282,28 @@ func (this *grpcHandler) defaultHandler(ctx context.Context, params map[string]a
 } // }}}
 
 // 预生成 middleware 函数缓存
-func (this *grpcHandler) buildGroupHandlers() { // {{{
-	this.groupHandlers = map[string]RpcHandler{}
+func (g *grpcHandler) buildGroupHandlers() { // {{{
+	g.groupHandlers = map[string]RpcHandler{}
 	allGroups := rpcGroups
 	allGroups[""] = struct{}{}
 
 	for group := range allGroups {
 		if len(rpcMiddlewares) > 0 {
-			groupHandler := buildRpcMiddlewares(group, rpcMiddlewares...)(RpcHandler(this.defaultHandler))
-			this.groupHandlers[group] = groupHandler
+			groupHandler := buildRpcMiddlewares(group, rpcMiddlewares...)(RpcHandler(g.defaultHandler))
+			g.groupHandlers[group] = groupHandler
 		} else {
-			this.groupHandlers[group] = RpcHandler(this.defaultHandler)
+			g.groupHandlers[group] = RpcHandler(g.defaultHandler)
 		}
 	}
 } // }}}
 
-func (this *grpcHandler) addControllers() {
+func (g *grpcHandler) addControllers() {
 	for _, v := range defaultRpcs {
-		this.addController(v[0], AsString(v[1]))
+		g.addController(v[0], AsString(v[1]))
 	}
 }
 
-func (this *grpcHandler) addController(c any, group ...string) { // {{{
+func (g *grpcHandler) addController(c any, group ...string) { // {{{
 	reflectVal := reflect.ValueOf(c)
 	rt := reflectVal.Type()
 	ct := reflect.Indirect(reflectVal).Type()
@@ -315,11 +315,11 @@ func (this *grpcHandler) addController(c any, group ...string) { // {{{
 
 	controller_name = strings.ToLower(controller_name)
 
-	if _, ok := this.routeMap[controller_name]; ok {
+	if _, ok := g.routeMap[controller_name]; ok {
 		return
 	} else {
-		this.routeMap[controller_name] = make(map[string]reflect.Type)
-		this.methodMap[controller_name] = make(map[string]int)
+		g.routeMap[controller_name] = make(map[string]reflect.Type)
+		g.methodMap[controller_name] = make(map[string]int)
 	}
 	var action_fullname string
 	var action_name string
@@ -327,8 +327,8 @@ func (this *grpcHandler) addController(c any, group ...string) { // {{{
 		action_fullname = rt.Method(i).Name
 		if strings.HasSuffix(action_fullname, ACTION_SUFFIX) {
 			action_name = strings.ToLower(strings.TrimSuffix(action_fullname, ACTION_SUFFIX))
-			this.routeMap[controller_name][action_name] = ct
-			this.methodMap[controller_name][action_name] = rt.Method(i).Index
+			g.routeMap[controller_name][action_name] = ct
+			g.methodMap[controller_name][action_name] = rt.Method(i).Index
 		}
 	}
 	methodRenderError, _ := rt.MethodByName("RenderError")
@@ -336,11 +336,11 @@ func (this *grpcHandler) addController(c any, group ...string) { // {{{
 	methodInit, _ := rt.MethodByName("Init")
 	methodFinal, _ := rt.MethodByName("Final")
 	methodGetResponseData, _ := rt.MethodByName("GetResponseData")
-	this.methodMap[controller_name]["RenderError"] = methodRenderError.Index
-	this.methodMap[controller_name]["Prepare"] = methodPrepare.Index
-	this.methodMap[controller_name]["Init"] = methodInit.Index
-	this.methodMap[controller_name]["Final"] = methodFinal.Index
-	this.methodMap[controller_name]["GetResponseData"] = methodGetResponseData.Index
+	g.methodMap[controller_name]["RenderError"] = methodRenderError.Index
+	g.methodMap[controller_name]["Prepare"] = methodPrepare.Index
+	g.methodMap[controller_name]["Init"] = methodInit.Index
+	g.methodMap[controller_name]["Final"] = methodFinal.Index
+	g.methodMap[controller_name]["GetResponseData"] = methodGetResponseData.Index
 
 } // }}}
 

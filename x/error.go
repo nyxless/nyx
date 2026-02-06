@@ -59,16 +59,16 @@ type Error struct {
 	data MAP
 }
 
-func (this *Error) GetCode() int32 {
-	return this.code
+func (e *Error) GetCode() int32 {
+	return e.code
 }
 
-func (this *Error) GetMessage(langs ...string) string { // {{{
-	if len(this.fmt) > 0 {
+func (e *Error) GetMessage(langs ...string) string { // {{{
+	if len(e.fmt) > 0 {
 		//fmts的可用值为string, 若fmts最后一个值为map, 则认为它是异常时返回的data
-		if data, ok := this.fmt[len(this.fmt)-1].(MAP); ok {
-			this.fmt = this.fmt[0 : len(this.fmt)-1]
-			this.data = data
+		if data, ok := e.fmt[len(e.fmt)-1].(MAP); ok {
+			e.fmt = e.fmt[0 : len(e.fmt)-1]
+			e.data = data
 		}
 	}
 
@@ -80,39 +80,39 @@ func (this *Error) GetMessage(langs ...string) string { // {{{
 		lang = DEFAULT_LANG
 	}
 
-	errMsgs, ok := ErrMapRo[this.code]
+	errMsgs, ok := ErrMapRo[e.code]
 	if ok {
 		msg, ok = errMsgs[lang]
 	}
 
 	if !ok {
-		msg, ok = this.msg[lang]
+		msg, ok = e.msg[lang]
 
 		if !ok && lang != DEFAULT_LANG {
-			msg = this.msg[DEFAULT_LANG]
+			msg = e.msg[DEFAULT_LANG]
 		}
 	}
 
-	if len(this.fmt) > 0 {
-		return fmt.Sprintf(msg, this.fmt)
+	if len(e.fmt) > 0 {
+		return fmt.Sprintf(msg, e.fmt)
 	}
 
 	return msg
 } // }}}
 
 // 从 fmt 参数中提取 data
-func (this *Error) GetData() MAP { // {{{
-	if this.data == nil && len(this.fmt) > 0 {
-		if data, ok := this.fmt[len(this.fmt)-1].(MAP); ok {
+func (e *Error) GetData() MAP { // {{{
+	if e.data == nil && len(e.fmt) > 0 {
+		if data, ok := e.fmt[len(e.fmt)-1].(MAP); ok {
 			return data
 		}
 	}
 
-	return this.data
+	return e.data
 } // }}}
 
-func (this *Error) Error() string {
-	return this.GetMessage()
+func (e *Error) Error() string {
+	return e.GetMessage()
 }
 
 // 捕获异常时，可同时返回data(通过fmts参数最后一个类型为map的值)

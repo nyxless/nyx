@@ -78,32 +78,32 @@ type WsServer struct {
 	handler        func(net.Conn)
 }
 
-func (this *WsServer) Run() { // {{{
-	if this.handler == nil {
+func (w *WsServer) Run() { // {{{
+	if w.handler == nil {
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", this.addr, this.port)
+	addr := fmt.Sprintf("%s:%d", w.addr, w.port)
 
 	log.Println("WebsocketServer Listen", addr)
 
 	mux := http.NewServeMux()
-	mux.Handle(this.path, websocket.Handler(func(conn *websocket.Conn) {
-		this.process(conn)
+	mux.Handle(w.path, websocket.Handler(func(conn *websocket.Conn) {
+		w.process(conn)
 	}))
 
-	rtimeout := time.Duration(this.readTimeout) * time.Millisecond
-	wtimeout := time.Duration(this.writeTimeout) * time.Millisecond
+	rtimeout := time.Duration(w.readTimeout) * time.Millisecond
+	wtimeout := time.Duration(w.writeTimeout) * time.Millisecond
 
-	if this.useGraceful {
-		log.Println(endless.ListenAndServe(addr, mux, rtimeout, wtimeout, this.maxHeaderBytes))
+	if w.useGraceful {
+		log.Println(endless.ListenAndServe(addr, mux, rtimeout, wtimeout, w.maxHeaderBytes))
 	} else {
 		httpServer := &http.Server{
 			Addr:           addr,
 			Handler:        mux,
 			ReadTimeout:    rtimeout,
 			WriteTimeout:   wtimeout,
-			MaxHeaderBytes: this.maxHeaderBytes,
+			MaxHeaderBytes: w.maxHeaderBytes,
 		}
 
 		ln, err := net.Listen("tcp", addr)
@@ -138,7 +138,7 @@ func NewTCPKeepAliveListener(ln *net.TCPListener, d time.Duration) net.Listener 
 	}
 } // }}}
 
-func (this *WsServer) process(conn net.Conn) { // {{{
+func (w *WsServer) process(conn net.Conn) { // {{{
 	defer func() {
 		if err := recover(); err != nil {
 			var errmsg string
@@ -159,5 +159,5 @@ func (this *WsServer) process(conn net.Conn) { // {{{
 
 	defer conn.Close() // 关闭连接
 
-	this.handler(conn)
+	w.handler(conn)
 } // }}}

@@ -54,25 +54,25 @@ var dsnFuncs = map[string]SqlDsn{
 	},
 }
 
-func (this *DBProxy) Get(conf MAP) (db.DBClient, error) { // {{{
+func (d *DBProxy) Get(conf MAP) (db.DBClient, error) { // {{{
 	host, ok := conf["host"]
 	if !ok {
 		return nil, fmt.Errorf("DB 配置有误")
 	}
 
 	key := AsString(host)
-	if client := this.getClient(key); client != nil {
+	if client := d.getClient(key); client != nil {
 		return client, nil
 	}
 
-	result, err, _ := this.sf.Do(key, func() (interface{}, error) {
+	result, err, _ := d.sf.Do(key, func() (interface{}, error) {
 		// 再次检查，防止在等待期间已经有其他goroutine创建了连接
-		if client := this.getClient(key); client != nil {
+		if client := d.getClient(key); client != nil {
 			return client, nil
 		}
 
 		// 创建新连接
-		return this.add(conf, key)
+		return d.add(conf, key)
 	})
 
 	if err != nil {
@@ -83,10 +83,10 @@ func (this *DBProxy) Get(conf MAP) (db.DBClient, error) { // {{{
 
 } // }}}
 
-func (this *DBProxy) getClient(key string) db.DBClient { // {{{
-	this.mutex.RLock()
-	client, ok := this.c[key]
-	this.mutex.RUnlock()
+func (d *DBProxy) getClient(key string) db.DBClient { // {{{
+	d.mutex.RLock()
+	client, ok := d.c[key]
+	d.mutex.RUnlock()
 
 	if !ok || client == nil {
 		return nil
@@ -95,7 +95,7 @@ func (this *DBProxy) getClient(key string) db.DBClient { // {{{
 	return client
 } // }}}
 
-func (this *DBProxy) add(conf MAP, key string) (db.DBClient, error) { // {{{
+func (d *DBProxy) add(conf MAP, key string) (db.DBClient, error) { // {{{
 	var err error
 	var debug bool
 	var dsn string
@@ -155,23 +155,23 @@ func (this *DBProxy) add(conf MAP, key string) (db.DBClient, error) { // {{{
 		return nil, fmt.Errorf("无法连接到 DB: [%v] %v", conf["host"], err)
 	}
 
-	this.mutex.Lock()
-	this.c[key] = client
-	this.mutex.Unlock()
+	d.mutex.Lock()
+	d.c[key] = client
+	d.mutex.Unlock()
 
 	Info("Add DBProxy:", fmt.Sprintf(" host [ %s ], type [ %s ] db [ %s ], #ID [ %s ]", conf["host"], dbt, conf["database"], client.ID()))
 
 	return client, nil
 } // }}}
 
-func (this *DBProxy) Close() { // {{{
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
+func (d *DBProxy) Close() { // {{{
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
 
-	for _, client := range this.c {
+	for _, client := range d.c {
 		client.Close()
 	}
-	this.c = make(map[string]db.DBClient)
+	d.c = make(map[string]db.DBClient)
 } // }}}
 
 // 拼装参数时，作为可执行字符，而不是字符串值

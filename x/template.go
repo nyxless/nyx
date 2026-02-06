@@ -86,21 +86,21 @@ type Template struct {
 }
 
 // 解析模板变量
-func (this *Template) Assign(vals ...any) { // {{{
-	if nil == this.vals {
-		this.vals = make(map[string]interface{})
+func (t *Template) Assign(vals ...any) { // {{{
+	if nil == t.vals {
+		t.vals = make(map[string]interface{})
 	}
 
 	l := len(vals)
 	if l == 1 {
 		vals_map := AsMap(vals[0])
 		for k, v := range vals_map {
-			this.vals[k] = v
+			t.vals[k] = v
 		}
 	} else {
 		i := 0
 		for i+1 < l {
-			this.vals[vals[i].(string)] = vals[i+1]
+			t.vals[vals[i].(string)] = vals[i+1]
 
 			i = i + 2
 		}
@@ -108,27 +108,27 @@ func (this *Template) Assign(vals ...any) { // {{{
 } // }}}
 
 // 添加模板函数
-func (this *Template) AddFunc(vals ...interface{}) { // {{{
-	if nil == this.funcs {
-		this.funcs = make(map[string]interface{})
+func (t *Template) AddFunc(vals ...interface{}) { // {{{
+	if nil == t.funcs {
+		t.funcs = make(map[string]interface{})
 	}
 
 	i := 0
 	l := len(vals)
 	for i+1 < l {
-		this.funcs[vals[i].(string)] = vals[i+1]
+		t.funcs[vals[i].(string)] = vals[i+1]
 
 		i = i + 2
 	}
 } // }}}
 
-func (this *Template) Render(w http.ResponseWriter, uri, file string) error { // {{{
-	t, inc_info, err := this.loadTemplate(uri, file)
+func (t *Template) Render(w http.ResponseWriter, uri, file string) error { // {{{
+	tmp, inc_info, err := t.loadTemplate(uri, file)
 	if err != nil {
 		return err
 	}
 
-	err = t.Execute(w, this.vals)
+	err = tmp.Execute(w, t.vals)
 	if err != nil {
 		return fmt.Errorf("Render template failed, err: %v, include files info[%v]", err, JsonEncode(inc_info))
 	}
@@ -136,41 +136,41 @@ func (this *Template) Render(w http.ResponseWriter, uri, file string) error { //
 	return nil
 } // }}}
 
-func (this *Template) loadTemplate(uri, template_file string) (*template.Template, interface{}, error) { // {{{
-	this.lock.RLock()
+func (t *Template) loadTemplate(uri, template_file string) (*template.Template, interface{}, error) { // {{{
+	t.lock.RLock()
 
-	if t, ok := templateCache[uri+"-"+template_file]; ok {
-		this.lock.RUnlock()
-		return t, nil, nil
+	if tmp, ok := templateCache[uri+"-"+template_file]; ok {
+		t.lock.RUnlock()
+		return tmp, nil, nil
 	}
 
-	this.lock.RUnlock()
+	t.lock.RUnlock()
 
-	this.lock.Lock()
-	defer this.lock.Unlock()
+	t.lock.Lock()
+	defer t.lock.Unlock()
 
-	data, inc_info, err := this.loadTemplateData(template_file)
+	data, inc_info, err := t.loadTemplateData(template_file)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	//合并funcmap
 	funcs := TemplateFuncs
-	for k, v := range this.funcs {
+	for k, v := range t.funcs {
 		funcs[k] = v
 	}
 
-	t, err := template.New(uri + ":" + template_file).Funcs(funcs).Parse(data)
+	tmp, err := template.New(uri + ":" + template_file).Funcs(funcs).Parse(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Parse template failed, err: %v, include files info[%v]", err, JsonEncode(inc_info))
 	}
 
-	templateCache[uri+"-"+template_file] = t
+	templateCache[uri+"-"+template_file] = tmp
 
-	return t, inc_info, nil
+	return tmp, inc_info, nil
 } // }}}
 
-func (this *Template) loadTemplateData(template_file string) (string, interface{}, error) { // {{{
+func (t *Template) loadTemplateData(template_file string) (string, interface{}, error) { // {{{
 	var buffer []byte
 	var err error
 	if templateUseEmbed {
@@ -208,11 +208,11 @@ func (this *Template) loadTemplateData(template_file string) (string, interface{
 				new_data += data[start:m[0]]
 				inc_name := strings.Trim(data[m[2]:m[3]], " \r\t\v\n\"'")
 
-				if this.recursion++; this.recursion > ConfTemplateRecursionLimit {
+				if t.recursion++; t.recursion > ConfTemplateRecursionLimit {
 					return "", nil, fmt.Errorf("The recursion is too many times, no more than 3 times, you can modify it in the configuration file by [recursion_limit]")
 				}
 
-				inc_data, inc_info, err := this.loadTemplateData(inc_name)
+				inc_data, inc_info, err := t.loadTemplateData(inc_name)
 				if err != nil {
 					return "", nil, fmt.Errorf("Failed to load include file [%s] from [%s], err: %v", inc_name, template_file, err)
 					//inc_data = data[m[0]:m[1]]

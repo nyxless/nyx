@@ -216,111 +216,111 @@ func (cv *ConfVal) MapsSlice(def ...[]MAPS) []MAPS { // {{{
 	return m
 } // }}}
 
-func (this *Config) Get(keys ...string) *ConfVal { // {{{
-	val, ok := GetMapNode(this.data, keys...)
+func (c *Config) Get(keys ...string) *ConfVal { // {{{
+	val, ok := GetMapNode(c.data, keys...)
 	return &ConfVal{
 		val, ok,
 	}
 } // }}}
 
-func (this *Config) GetConifg(keys ...string) *Config { // {{{
+func (c *Config) GetConifg(keys ...string) *Config { // {{{
 	return &Config{
-		this.Get(keys...).Map(),
+		c.Get(keys...).Map(),
 	}
 } // }}}
 
-func (this *Config) GetString(keys ...string) string { // {{{
-	return this.Get(keys...).String()
+func (c *Config) GetString(keys ...string) string { // {{{
+	return c.Get(keys...).String()
 } // }}}
 
-func (this *Config) GetInt(keys ...string) int { // {{{
-	return this.Get(keys...).Int()
+func (c *Config) GetInt(keys ...string) int { // {{{
+	return c.Get(keys...).Int()
 } // }}}
 
-func (this *Config) GetInt64(keys ...string) int64 { // {{{
-	return this.Get(keys...).Int64()
+func (c *Config) GetInt64(keys ...string) int64 { // {{{
+	return c.Get(keys...).Int64()
 } // }}}
 
-func (this *Config) GetBool(keys ...string) bool { // {{{
-	return this.Get(keys...).Bool()
+func (c *Config) GetBool(keys ...string) bool { // {{{
+	return c.Get(keys...).Bool()
 } // }}}
 
-func (this *Config) GetMap(keys ...string) MAP { // {{{
-	return this.Get(keys...).Map()
+func (c *Config) GetMap(keys ...string) MAP { // {{{
+	return c.Get(keys...).Map()
 } // }}}
 
-func (this *Config) GetStringMap(keys ...string) MAPS { // {{{
-	return this.Get(keys...).StringMap()
+func (c *Config) GetStringMap(keys ...string) MAPS { // {{{
+	return c.Get(keys...).StringMap()
 } // }}}
 
-func (this *Config) GetIntMap(keys ...string) MAPI { // {{{
-	return this.Get(keys...).IntMap()
+func (c *Config) GetIntMap(keys ...string) MAPI { // {{{
+	return c.Get(keys...).IntMap()
 } // }}}
 
-func (this *Config) GetSlice(keys ...string) []any { // {{{
-	return this.Get(keys...).Slice()
+func (c *Config) GetSlice(keys ...string) []any { // {{{
+	return c.Get(keys...).Slice()
 } // }}}
 
-func (this *Config) GetStringSlice(keys ...string) []string { // {{{
-	return this.Get(keys...).StringSlice()
+func (c *Config) GetStringSlice(keys ...string) []string { // {{{
+	return c.Get(keys...).StringSlice()
 } // }}}
 
-func (this *Config) GetIntSlice(keys ...string) []int { // {{{
-	return this.Get(keys...).IntSlice()
+func (c *Config) GetIntSlice(keys ...string) []int { // {{{
+	return c.Get(keys...).IntSlice()
 } // }}}
 
-func (this *Config) GetMapSlice(keys ...string) []MAP { // {{{
-	return this.Get(keys...).MapSlice()
+func (c *Config) GetMapSlice(keys ...string) []MAP { // {{{
+	return c.Get(keys...).MapSlice()
 } // }}}
 
-func (this *Config) GetMapsSlice(keys ...string) []MAPS { // {{{
-	return this.Get(keys...).MapsSlice()
+func (c *Config) GetMapsSlice(keys ...string) []MAPS { // {{{
+	return c.Get(keys...).MapsSlice()
 } // }}}
 
-func (this *Config) GetDefString(def string, keys ...string) string { // {{{
-	return this.Get(keys...).String(def)
+func (c *Config) GetDefString(def string, keys ...string) string { // {{{
+	return c.Get(keys...).String(def)
 } // }}}
 
-func (this *Config) GetDefInt(def int, keys ...string) int { // {{{
-	return this.Get(keys...).Int(def)
+func (c *Config) GetDefInt(def int, keys ...string) int { // {{{
+	return c.Get(keys...).Int(def)
 } // }}}
 
-func (this *Config) GetDefInt64(def int64, keys ...string) int64 { // {{{
-	return this.Get(keys...).Int64(def)
+func (c *Config) GetDefInt64(def int64, keys ...string) int64 { // {{{
+	return c.Get(keys...).Int64(def)
 } // }}}
 
-func (this *Config) GetDefBool(def bool, keys ...string) bool { // {{{
-	return this.Get(keys...).Bool(def)
+func (c *Config) GetDefBool(def bool, keys ...string) bool { // {{{
+	return c.Get(keys...).Bool(def)
 } // }}}
 
-func (this *Config) GetDefMap(def MAP, keys ...string) MAP { // {{{
-	return this.Get(keys...).Map(def)
+func (c *Config) GetDefMap(def MAP, keys ...string) MAP { // {{{
+	return c.Get(keys...).Map(def)
 } // }}}
 
-func (this *Config) GetDefStringMap(def MAPS, keys ...string) MAPS { // {{{
-	return this.Get(keys...).StringMap(def)
+func (c *Config) GetDefStringMap(def MAPS, keys ...string) MAPS { // {{{
+	return c.Get(keys...).StringMap(def)
 } // }}}
 
-func (this *Config) GetDefIntMap(def MAPI, keys ...string) MAPI { // {{{
-	return this.Get(keys...).IntMap(def)
+func (c *Config) GetDefIntMap(def MAPI, keys ...string) MAPI { // {{{
+	return c.Get(keys...).IntMap(def)
 } // }}}
 
-func (this *Config) GetDefSlice(def []any, keys ...string) []any { // {{{
-	return this.Get(keys...).Slice(def)
+func (c *Config) GetDefSlice(def []any, keys ...string) []any { // {{{
+	return c.Get(keys...).Slice(def)
 } // }}}
 
-func (this *Config) GetDefStringSlice(def []string, keys ...string) []string { // {{{
-	return this.Get(keys...).StringSlice(def)
+func (c *Config) GetDefStringSlice(def []string, keys ...string) []string { // {{{
+	return c.Get(keys...).StringSlice(def)
 } // }}}
 
-func (this *Config) GetDefIntSlice(def []int, keys ...string) []int { // {{{
-	return this.Get(keys...).IntSlice(def)
+func (c *Config) GetDefIntSlice(def []int, keys ...string) []int { // {{{
+	return c.Get(keys...).IntSlice(def)
 } // }}}
 
-func (this *Config) GetDefMapSlice(def []MAP, keys ...string) []MAP { // {{{
-	return this.Get(keys...).MapSlice(def)
+func (c *Config) GetDefMapSlice(def []MAP, keys ...string) []MAP { // {{{
+	return c.Get(keys...).MapSlice(def)
 } // }}}
 
-func (this *Config) GetDefMapsSlice(def []MAPS, keys ...string) []MAPS { // {{{
-	return this.Get(keys...).MapsSlice(def)
+func (c *Config) GetDefMapsSlice(def []MAPS, keys ...string) []MAPS { // {{{
+	return c.Get(keys...).MapsSlice(def)
 } // }}}

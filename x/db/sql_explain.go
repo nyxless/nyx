@@ -16,13 +16,13 @@ type sqlResult = []map[string]any
 
 var def_fields = []string{"id", "select_type", "table", "partitions", "type", "possible_keys", "key", "key_len", "ref", "rows", "filtered", "Extra"}
 
-func (this *SqlExplain) DrawConsole() { /*{{{*/
+func (s *SqlExplain) DrawConsole() { /*{{{*/
 	arr_max_length := []int{}
 	records := map[int][]string{}
 	fields := def_fields
 
-	if this.dbType != "mysql" {
-		for _, record := range this.result {
+	if s.dbType != "mysql" {
+		for _, record := range s.result {
 			fields = []string{}
 			for field, _ := range record {
 				fields = append(fields, field)
@@ -36,7 +36,7 @@ func (this *SqlExplain) DrawConsole() { /*{{{*/
 		arr_max_length = append(arr_max_length, len(v)+2)
 	}
 
-	for i, record := range this.result {
+	for i, record := range s.result {
 		records[i] = []string{}
 
 		for j, v := range fields {
@@ -56,20 +56,20 @@ func (this *SqlExplain) DrawConsole() { /*{{{*/
 
 	fmt.Println("Explain result:")
 	//draw title
-	this.drawLine(arr_max_length)
-	this.drawData(fields, arr_max_length)
+	s.drawLine(arr_max_length)
+	s.drawData(fields, arr_max_length)
 	//draw data
-	for i, _ := range this.result {
-		this.drawLine(arr_max_length)
-		this.drawData(records[i], arr_max_length)
+	for i, _ := range s.result {
+		s.drawLine(arr_max_length)
+		s.drawData(records[i], arr_max_length)
 	}
 
-	this.drawLine(arr_max_length)
+	s.drawLine(arr_max_length)
 
 	fmt.Println("")
 } /*}}}*/
 
-func (this *SqlExplain) drawLine(arr_length_list []int) { /*{{{*/
+func (s *SqlExplain) drawLine(arr_length_list []int) { /*{{{*/
 	fmt.Print("+")
 	for _, length := range arr_length_list {
 		fmt.Print(strings.Repeat("-", length), "+")
@@ -77,7 +77,7 @@ func (this *SqlExplain) drawLine(arr_length_list []int) { /*{{{*/
 	fmt.Println("")
 } /*}}}*/
 
-func (this *SqlExplain) drawData(arr_record_list []string, arr_length_list []int) { /*{{{*/
+func (s *SqlExplain) drawData(arr_record_list []string, arr_length_list []int) { /*{{{*/
 	fmt.Print("|")
 	left := 0
 	for i, value := range arr_record_list {

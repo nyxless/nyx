@@ -44,20 +44,20 @@ type CliServer struct {
 	methodMap map[string]map[string]int          //key:controller: {key:method value:method_index}
 }
 
-func (this *CliServer) AddController(c any, group ...string) {
-	this.addController(c, group...)
+func (c *CliServer) AddController(con any, group ...string) {
+	c.addController(con, group...)
 }
 
-func (this *CliServer) Run() {
-	if len(this.routMap) == 0 {
+func (c *CliServer) Run() {
+	if len(c.routMap) == 0 {
 		return
 	}
 
 	//runtime.GOMAXPROCS(runtime.NumCPU())
-	this.serveCli()
+	c.serveCli()
 }
 
-func (this *CliServer) serveCli() {
+func (c *CliServer) serveCli() {
 	defer func() {
 		if err := recover(); err != nil {
 			var errmsg string
@@ -76,10 +76,10 @@ func (this *CliServer) serveCli() {
 		}
 	}()
 
-	uri := strings.Trim(this.uri, " \r\t\v/")
+	uri := strings.Trim(c.uri, " \r\t\v/")
 	idx := strings.LastIndex(uri, "/")
 
-	Interceptor(idx > 0, ERR_METHOD_INVALID, this.uri)
+	Interceptor(idx > 0, ERR_METHOD_INVALID, c.uri)
 
 	uri = strings.ToLower(uri)
 
@@ -94,7 +94,7 @@ func (this *CliServer) serveCli() {
 	canhandler := false
 	var controllerType reflect.Type
 	if controller_name != "" && action_name != "" {
-		if routMapSub, ok := this.routMap[controller_name]; ok {
+		if routMapSub, ok := c.routMap[controller_name]; ok {
 			if controllerType, ok = routMapSub[action_name]; ok {
 				canhandler = true
 			}
@@ -110,15 +110,15 @@ func (this *CliServer) serveCli() {
 	defer func() {
 		if err := recover(); err != nil {
 			in = []reflect.Value{reflect.ValueOf(err)}
-			method := vc.Method(this.methodMap[controller_name]["RenderError"])
+			method := vc.Method(c.methodMap[controller_name]["RenderError"])
 			method.Call(in)
 		}
 	}()
 
 	m := map[string][]string{}
 	var err error
-	if len(this.params) > 1 {
-		m, err = url.ParseQuery(this.params)
+	if len(c.params) > 1 {
+		m, err = url.ParseQuery(c.params)
 		if nil != err {
 			fmt.Println("params parse error")
 			return
@@ -130,23 +130,23 @@ func (this *CliServer) serveCli() {
 	in[1] = reflect.ValueOf(controller_name)
 	in[2] = reflect.ValueOf(action_name)
 	in[3] = reflect.ValueOf(group)
-	method = vc.Method(this.methodMap[controller_name]["PrepareCli"])
+	method = vc.Method(c.methodMap[controller_name]["PrepareCli"])
 	method.Call(in)
 
 	//call Init method if exists
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.methodMap[controller_name]["Init"])
+	method = vc.Method(c.methodMap[controller_name]["Init"])
 	method.Call(in)
 
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.methodMap[controller_name][action_name])
+	method = vc.Method(c.methodMap[controller_name][action_name])
 	method.Call(in)
 
 	return
 }
 
-func (this *CliServer) addController(c any, group ...string) {
-	reflectVal := reflect.ValueOf(c)
+func (c *CliServer) addController(con any, group ...string) {
+	reflectVal := reflect.ValueOf(con)
 	rt := reflectVal.Type()
 	ct := reflect.Indirect(reflectVal).Type()
 	controller_name := strings.TrimSuffix(ct.Name(), "Controller")
@@ -156,11 +156,11 @@ func (this *CliServer) addController(c any, group ...string) {
 
 	controller_name = strings.ToLower(controller_name)
 
-	if _, ok := this.routMap[controller_name]; ok {
+	if _, ok := c.routMap[controller_name]; ok {
 		return
 	} else {
-		this.routMap[controller_name] = make(map[string]reflect.Type)
-		this.methodMap[controller_name] = make(map[string]int)
+		c.routMap[controller_name] = make(map[string]reflect.Type)
+		c.methodMap[controller_name] = make(map[string]int)
 	}
 	var action_fullname string
 	var action_name string
@@ -168,14 +168,14 @@ func (this *CliServer) addController(c any, group ...string) {
 		action_fullname = rt.Method(i).Name
 		if strings.HasSuffix(action_fullname, ACTION_SUFFIX) {
 			action_name = strings.ToLower(strings.TrimSuffix(action_fullname, ACTION_SUFFIX))
-			this.routMap[controller_name][action_name] = ct
-			this.methodMap[controller_name][action_name] = rt.Method(i).Index
+			c.routMap[controller_name][action_name] = ct
+			c.methodMap[controller_name][action_name] = rt.Method(i).Index
 		}
 	}
 	methodRenderError, _ := rt.MethodByName("RenderError")
 	methodPrepare, _ := rt.MethodByName("Prepare")
 	methodInit, _ := rt.MethodByName("Init")
-	this.methodMap[controller_name]["RenderError"] = methodRenderError.Index
-	this.methodMap[controller_name]["Prepare"] = methodPrepare.Index
-	this.methodMap[controller_name]["Init"] = methodInit.Index
+	c.methodMap[controller_name]["RenderError"] = methodRenderError.Index
+	c.methodMap[controller_name]["Prepare"] = methodPrepare.Index
+	c.methodMap[controller_name]["Init"] = methodInit.Index
 }

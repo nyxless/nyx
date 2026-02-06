@@ -104,30 +104,30 @@ type HttpServer struct {
 	handler        *httpHandler
 }
 
-func (this *HttpServer) Run() {
-	if len(this.handler.routeMap) == 0 {
+func (hs *HttpServer) Run() {
+	if len(hs.handler.routeMap) == 0 {
 		Warn("Api controller was not found, pls add controller using func `AddApi` or shell `nyx init`")
 		return
 	}
 
 	//runtime.GOMAXPROCS(runtime.NumCPU())
-	addr := fmt.Sprintf("%s:%d", this.addr, this.port)
+	addr := fmt.Sprintf("%s:%d", hs.addr, hs.port)
 
 	Info("HttpServer Listen", addr)
 
-	rtimeout := time.Duration(this.rtimeout) * time.Millisecond
-	wtimeout := time.Duration(this.wtimeout) * time.Millisecond
+	rtimeout := time.Duration(hs.rtimeout) * time.Millisecond
+	wtimeout := time.Duration(hs.wtimeout) * time.Millisecond
 
 	//使用endless, 支持graceful reload
-	if this.useGraceful {
-		Warn(endless.ListenAndServe(addr, this.handler, rtimeout, wtimeout, this.maxHeaderBytes))
+	if hs.useGraceful {
+		Warn(endless.ListenAndServe(addr, hs.handler, rtimeout, wtimeout, hs.maxHeaderBytes))
 	} else {
 		server := &http.Server{
 			Addr:           addr,
-			Handler:        this.handler,
+			Handler:        hs.handler,
 			ReadTimeout:    rtimeout,
 			WriteTimeout:   wtimeout,
-			MaxHeaderBytes: this.maxHeaderBytes,
+			MaxHeaderBytes: hs.maxHeaderBytes,
 		}
 
 		Warn(server.ListenAndServe())
@@ -150,7 +150,7 @@ type httpHandler struct {
 	staticRoot    string                                    //静态资源文件根目录
 }
 
-func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { // {{{
+func (h *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { // {{{
 	ctx := r.Context()
 
 	defer func() {
@@ -177,14 +177,14 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 	var group, controller_name, action_name string
 	var url_values MAPS
 
-	if this.enablePprof && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
-		this.monitorPprof(rw, r)
+	if h.enablePprof && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
+		h.monitorPprof(rw, r)
 		return
-	} else if this.enableStatic && strings.HasPrefix(r.URL.Path, this.staticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
-		this.serveFile(rw, r)
+	} else if h.enableStatic && strings.HasPrefix(r.URL.Path, h.staticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
+		h.serveFile(rw, r)
 		return
 	} else if strings.HasPrefix(r.URL.Path, "/status") { //用于lvs监控
-		this.monitorStatus(rw, r)
+		h.monitorStatus(rw, r)
 		return
 	}
 
@@ -192,7 +192,7 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 	group, controller_name, action_name, url_values = ParseRoute(r.URL.Path, r.Method)
 
 	//校验 http METHOD
-	if !this.checkMethod(controller_name+"/"+action_name, r.Method) {
+	if !h.checkMethod(controller_name+"/"+action_name, r.Method) {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -212,14 +212,14 @@ func (this *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { //
 	r = r.WithContext(ctx)
 
 	//路由解析之后加载中间件
-	if hd, ok := this.groupHandlers[group]; ok {
+	if hd, ok := h.groupHandlers[group]; ok {
 		hd(rw, r)
 	} else {
-		this.defaultHandler(rw, r)
+		h.defaultHandler(rw, r)
 	}
 } // }}}
 
-func (this *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request) { // {{{
+func (h *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request) { // {{{
 	ctx := r.Context()
 
 	defer func() {
@@ -231,7 +231,7 @@ func (this *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request)
 	action_name := ctx.Value("action").(string)
 
 	// 先尝试执行预生成函数
-	if cf, ok := this.routeFuncs[controller_name]; ok {
+	if cf, ok := h.routeFuncs[controller_name]; ok {
 		if f, ok := cf[action_name]; ok {
 			f(rw, r)
 			ctx = r.Context()
@@ -242,7 +242,7 @@ func (this *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request)
 	canhandler := false
 	var controllerType reflect.Type
 	if controller_name != "" && action_name != "" {
-		if routMapSub, ok := this.routeMap[controller_name]; ok {
+		if routMapSub, ok := h.routeMap[controller_name]; ok {
 			if controllerType, ok = routMapSub[action_name]; ok {
 				canhandler = true
 			}
@@ -265,15 +265,15 @@ func (this *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request)
 	defer func() {
 		if err := recover(); err != nil {
 			in = []reflect.Value{reflect.ValueOf(err)}
-			method := vc.Method(this.actionMap[controller_name]["RenderError"])
+			method := vc.Method(h.actionMap[controller_name]["RenderError"])
 			method.Call(in)
 		}
 
 		in = make([]reflect.Value, 0)
-		method := vc.Method(this.actionMap[controller_name]["Final"])
+		method := vc.Method(h.actionMap[controller_name]["Final"])
 		method.Call(in)
 
-		method = vc.Method(this.actionMap[controller_name]["HttpFinal"])
+		method = vc.Method(h.actionMap[controller_name]["HttpFinal"])
 		method.Call(in)
 	}()
 
@@ -283,37 +283,37 @@ func (this *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request)
 	in[2] = reflect.ValueOf(controller_name)
 	in[3] = reflect.ValueOf(action_name)
 	in[4] = reflect.ValueOf(group)
-	method = vc.Method(this.actionMap[controller_name]["Prepare"])
+	method = vc.Method(h.actionMap[controller_name]["Prepare"])
 	method.Call(in)
 
 	//call Init method if exists
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.actionMap[controller_name]["Init"])
+	method = vc.Method(h.actionMap[controller_name]["Init"])
 	method.Call(in)
 
 	in = make([]reflect.Value, 0)
-	method = vc.Method(this.actionMap[controller_name][action_name])
+	method = vc.Method(h.actionMap[controller_name][action_name])
 	method.Call(in)
 
 } // }}}
 
 // 预生成 middleware 函数缓存
-func (this *httpHandler) buildGroupHandlers() { // {{{
-	this.groupHandlers = map[string]http.HandlerFunc{}
+func (h *httpHandler) buildGroupHandlers() { // {{{
+	h.groupHandlers = map[string]http.HandlerFunc{}
 
 	for group := range RouteGroups {
 		if len(httpMiddlewares) > 0 {
-			groupHandler := buildHttpMiddlewares(group, httpMiddlewares...)(http.HandlerFunc(this.defaultHandler))
-			this.groupHandlers[group], _ = groupHandler.(http.HandlerFunc)
+			groupHandler := buildHttpMiddlewares(group, httpMiddlewares...)(http.HandlerFunc(h.defaultHandler))
+			h.groupHandlers[group], _ = groupHandler.(http.HandlerFunc)
 		} else {
-			this.groupHandlers[group] = http.HandlerFunc(this.defaultHandler)
+			h.groupHandlers[group] = http.HandlerFunc(h.defaultHandler)
 		}
 	}
 } // }}}
 
 // 预生成 methodRule, 配置http_server.method_rule 转换-> { full_path: {"forbid": {"POST":{}}, "allow": {"GET":{},"PUT":{}}}} //full_path: group 和 controller 规则转换为 action 规则
-func (this *httpHandler) parseMethodRule() { // {{{
-	this.methodRule = map[string]map[string]map[string]struct{}{}
+func (h *httpHandler) parseMethodRule() { // {{{
+	h.methodRule = map[string]map[string]map[string]struct{}{}
 
 	fullpaths := make(map[string][]string)
 	for group, controllers := range RouteGroups { // {{{
@@ -337,27 +337,27 @@ func (this *httpHandler) parseMethodRule() { // {{{
 			path := strings.ToLower(rulePath)
 			if cas, exists := fullpaths[path]; exists {
 				for _, ca := range cas {
-					if this.methodRule[ca] == nil {
-						this.methodRule[ca] = make(map[string]map[string]struct{})
+					if h.methodRule[ca] == nil {
+						h.methodRule[ca] = make(map[string]map[string]struct{})
 					}
 
 					// 添加allow
 					if len(allows) > 0 {
-						if this.methodRule[ca]["allow"] == nil {
-							this.methodRule[ca]["allow"] = make(map[string]struct{})
+						if h.methodRule[ca]["allow"] == nil {
+							h.methodRule[ca]["allow"] = make(map[string]struct{})
 						}
 						for _, v := range allows {
-							this.methodRule[ca]["allow"][strings.ToUpper(v)] = struct{}{}
+							h.methodRule[ca]["allow"][strings.ToUpper(v)] = struct{}{}
 						}
 					}
 
 					// 添加forbid
 					if len(forbids) > 0 {
-						if this.methodRule[ca]["forbid"] == nil {
-							this.methodRule[ca]["forbid"] = make(map[string]struct{})
+						if h.methodRule[ca]["forbid"] == nil {
+							h.methodRule[ca]["forbid"] = make(map[string]struct{})
 						}
 						for _, v := range forbids {
-							this.methodRule[ca]["forbid"][strings.ToUpper(v)] = struct{}{}
+							h.methodRule[ca]["forbid"][strings.ToUpper(v)] = struct{}{}
 						}
 					}
 				}
@@ -368,16 +368,16 @@ func (this *httpHandler) parseMethodRule() { // {{{
 } // }}}
 
 // 校验 r.Method
-func (this *httpHandler) checkMethod(path, method string) bool { // {{{
-	if _, exists := this.methodRule[path]; exists {
-		if _, exists := this.methodRule[path]["forbid"]; exists {
-			if _, exists := this.methodRule[path]["forbid"][method]; exists {
+func (h *httpHandler) checkMethod(path, method string) bool { // {{{
+	if _, exists := h.methodRule[path]; exists {
+		if _, exists := h.methodRule[path]["forbid"]; exists {
+			if _, exists := h.methodRule[path]["forbid"][method]; exists {
 				return false
 			}
 		}
 
-		if _, exists := this.methodRule[path]["allow"]; exists {
-			_, pass := this.methodRule[path]["allow"][method]
+		if _, exists := h.methodRule[path]["allow"]; exists {
+			_, pass := h.methodRule[path]["allow"][method]
 			return pass
 		}
 	}
@@ -386,7 +386,7 @@ func (this *httpHandler) checkMethod(path, method string) bool { // {{{
 } // }}}
 
 // 静态资源服务
-func (this *httpHandler) serveFile(rw http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) serveFile(rw http.ResponseWriter, r *http.Request) {
 	// {{{
 	var filesys http.FileSystem
 	if staticUseEmbed {
@@ -401,28 +401,28 @@ func (this *httpHandler) serveFile(rw http.ResponseWriter, r *http.Request) {
 			filesys = http.FS(embedStatic)
 		}
 	} else {
-		filesys = http.Dir(this.staticRoot)
+		filesys = http.Dir(h.staticRoot)
 	}
-	http.StripPrefix(this.staticPath, http.FileServer(filesys)).ServeHTTP(rw, r)
+	http.StripPrefix(h.staticPath, http.FileServer(filesys)).ServeHTTP(rw, r)
 } // }}}
 
 // pprof监控
-func (this *httpHandler) monitorPprof(rw http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) monitorPprof(rw http.ResponseWriter, r *http.Request) {
 	http.DefaultServeMux.ServeHTTP(rw, r)
 }
 
 // 用于lvs监控
-func (this *httpHandler) monitorStatus(rw http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) monitorStatus(rw http.ResponseWriter, r *http.Request) {
 	rw.Write([]byte("ok\n"))
 }
 
-func (this *httpHandler) addControllers() {
+func (h *httpHandler) addControllers() {
 	for _, v := range defaultApis {
-		this.addController(v[0], AsString(v[1]))
+		h.addController(v[0], AsString(v[1]))
 	}
 }
 
-func (this *httpHandler) addController(c interface{}, groups ...string) { // {{{
+func (h *httpHandler) addController(c interface{}, groups ...string) { // {{{
 	reflectVal := reflect.ValueOf(c)
 	rt := reflectVal.Type()
 	ct := reflect.Indirect(reflectVal).Type()
@@ -434,7 +434,7 @@ func (this *httpHandler) addController(c interface{}, groups ...string) { // {{{
 		controller_name = strings.Trim(group, " \r\t\v/") + "/" + controller_name
 	}
 
-	if _, ok := this.routeMap[controller_name]; ok {
+	if _, ok := h.routeMap[controller_name]; ok {
 		return
 	}
 
@@ -444,8 +444,8 @@ func (this *httpHandler) addController(c interface{}, groups ...string) { // {{{
 
 	RouteGroups[group][controller_name] = map[string]struct{}{}
 
-	this.routeMap[controller_name] = make(map[string]reflect.Type)
-	this.actionMap[controller_name] = make(map[string]int)
+	h.routeMap[controller_name] = make(map[string]reflect.Type)
+	h.actionMap[controller_name] = make(map[string]int)
 
 	var action_fullname string
 	var action_name string
@@ -453,8 +453,8 @@ func (this *httpHandler) addController(c interface{}, groups ...string) { // {{{
 		action_fullname = rt.Method(i).Name
 		if strings.HasSuffix(action_fullname, ACTION_SUFFIX) {
 			action_name = strings.ToLower(strings.TrimSuffix(action_fullname, ACTION_SUFFIX))
-			this.routeMap[controller_name][action_name] = ct
-			this.actionMap[controller_name][action_name] = rt.Method(i).Index
+			h.routeMap[controller_name][action_name] = ct
+			h.actionMap[controller_name][action_name] = rt.Method(i).Index
 			RouteGroups[group][controller_name][action_name] = struct{}{}
 		}
 	}
@@ -463,11 +463,11 @@ func (this *httpHandler) addController(c interface{}, groups ...string) { // {{{
 	methodInit, _ := rt.MethodByName("Init")
 	methodFinal, _ := rt.MethodByName("Final")
 	methodHttpFinal, _ := rt.MethodByName("HttpFinal")
-	this.actionMap[controller_name]["RenderError"] = methodRenderError.Index
-	this.actionMap[controller_name]["Prepare"] = methodPrepare.Index
-	this.actionMap[controller_name]["Init"] = methodInit.Index
-	this.actionMap[controller_name]["Final"] = methodFinal.Index
-	this.actionMap[controller_name]["HttpFinal"] = methodHttpFinal.Index
+	h.actionMap[controller_name]["RenderError"] = methodRenderError.Index
+	h.actionMap[controller_name]["Prepare"] = methodPrepare.Index
+	h.actionMap[controller_name]["Init"] = methodInit.Index
+	h.actionMap[controller_name]["Final"] = methodFinal.Index
+	h.actionMap[controller_name]["HttpFinal"] = methodHttpFinal.Index
 } // }}}
 
 //

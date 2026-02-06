@@ -26,8 +26,11 @@ type Controller struct {
 	logOmitParams map[string]struct{} //不希望记录在日志中的参数
 }
 
-// 默认的初始化方法，可通过在项目中重写此方法实现公共入口方法
+// 默认的初始化方法，可在子控制器中重写, 框架自动调用
 func (c *Controller) Init() {}
+
+// 默认的结束方法, 可在子控制器中重写, 框架自动调用
+func (c *Controller) Final() {}
 
 func (c *Controller) Prepare(ctx context.Context, controller, action, group string) { // {{{
 	c.startTime = time.Now()

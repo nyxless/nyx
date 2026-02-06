@@ -22,7 +22,7 @@ type RedisProxy struct {
 	sf    *singleflight.Group
 }
 
-func (this *RedisProxy) Get(conf MAP) (*redis.RedisClient, error) { //{{{
+func (r *RedisProxy) Get(conf MAP) (*redis.RedisClient, error) { //{{{
 	var key string
 
 	host, ok := conf["host"]
@@ -36,18 +36,18 @@ func (this *RedisProxy) Get(conf MAP) (*redis.RedisClient, error) { //{{{
 		key = Join(host, ",")
 	}
 
-	if client := this.getClient(key); client != nil {
+	if client := r.getClient(key); client != nil {
 		return client, nil
 	}
 
-	result, err, _ := this.sf.Do(key, func() (interface{}, error) {
+	result, err, _ := r.sf.Do(key, func() (interface{}, error) {
 		// 再次检查，防止在等待期间已经有其他goroutine创建了连接
-		if client := this.getClient(key); client != nil {
+		if client := r.getClient(key); client != nil {
 			return client, nil
 		}
 
 		// 创建新连接
-		return this.add(conf, key)
+		return r.add(conf, key)
 	})
 
 	if err != nil {
@@ -57,10 +57,10 @@ func (this *RedisProxy) Get(conf MAP) (*redis.RedisClient, error) { //{{{
 	return result.(*redis.RedisClient), nil
 } // }}}
 
-func (this *RedisProxy) getClient(key string) *redis.RedisClient { // {{{
-	this.mutex.RLock()
-	client, ok := this.c[key]
-	this.mutex.RUnlock()
+func (r *RedisProxy) getClient(key string) *redis.RedisClient { // {{{
+	r.mutex.RLock()
+	client, ok := r.c[key]
+	r.mutex.RUnlock()
 
 	if !ok || client == nil {
 		return nil
@@ -69,7 +69,7 @@ func (this *RedisProxy) getClient(key string) *redis.RedisClient { // {{{
 	return client
 } // }}}
 
-func (this *RedisProxy) add(conf MAP, key string) (*redis.RedisClient, error) { //{{{
+func (r *RedisProxy) add(conf MAP, key string) (*redis.RedisClient, error) { //{{{
 	var hosts []string
 
 	if addr, ok := conf["host"]; ok {
@@ -169,21 +169,21 @@ func (this *RedisProxy) add(conf MAP, key string) (*redis.RedisClient, error) { 
 		return nil, fmt.Errorf("无法连接到 Redis: [%v] %v", hosts, err)
 	}
 
-	this.mutex.Lock()
-	this.c[key] = client
-	this.mutex.Unlock()
+	r.mutex.Lock()
+	r.c[key] = client
+	r.mutex.Unlock()
 
 	Printf("add RedisProxy : [ %v ]\n", hosts)
 
 	return client, nil
 } // }}}
 
-func (this *RedisProxy) Close() { // {{{
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
+func (r *RedisProxy) Close() { // {{{
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
-	for _, client := range this.c {
+	for _, client := range r.c {
 		client.Close()
 	}
-	this.c = make(map[string]*redis.RedisClient)
+	r.c = make(map[string]*redis.RedisClient)
 } // }}}

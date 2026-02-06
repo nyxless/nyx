@@ -52,32 +52,32 @@ type TcpServer struct {
 	handler     func(net.Conn)
 }
 
-func (this *TcpServer) SetTcpHandler(h func(net.Conn)) {
-	this.handler = h
+func (t *TcpServer) SetTcpHandler(h func(net.Conn)) {
+	t.handler = h
 }
 
-func (this *TcpServer) Run() { // {{{
-	if this.handler == nil {
+func (t *TcpServer) Run() { // {{{
+	if t.handler == nil {
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", this.addr, this.port)
+	addr := fmt.Sprintf("%s:%d", t.addr, t.port)
 
 	log.Println("TcpServer Listen", addr)
 
-	if this.useGraceful {
-		log.Println(endless.ListenAndServeTcp(addr, "tcp4", this))
+	if t.useGraceful {
+		log.Println(endless.ListenAndServeTcp(addr, "tcp4", t))
 	} else {
-		listener, err := this.listenTCP(addr)
+		listener, err := t.listenTCP(addr)
 		if err != nil {
 			log.Println("TcpServer Listen error:", err)
 		}
 
-		this.Serve(listener)
+		t.Serve(listener)
 	}
 } // }}}
 
-func (this *TcpServer) listenTCP(addrStr string) (net.Listener, error) { // {{{
+func (t *TcpServer) listenTCP(addrStr string) (net.Listener, error) { // {{{
 	addr, err := net.ResolveTCPAddr("tcp4", addrStr)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (this *TcpServer) listenTCP(addrStr string) (net.Listener, error) { // {{{
 	return listener, err
 } // }}}
 
-func (this *TcpServer) Serve(listener net.Listener) error { // {{{
+func (t *TcpServer) Serve(listener net.Listener) error { // {{{
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -95,13 +95,13 @@ func (this *TcpServer) Serve(listener net.Listener) error { // {{{
 			return err
 		}
 
-		go this.process(conn)
+		go t.process(conn)
 	}
 
 	return nil
 } // }}}
 
-func (this *TcpServer) process(conn net.Conn) { // {{{
+func (t *TcpServer) process(conn net.Conn) { // {{{
 	defer func() {
 		if err := recover(); err != nil {
 			var errmsg string
@@ -122,5 +122,5 @@ func (this *TcpServer) process(conn net.Conn) { // {{{
 
 	defer conn.Close() // 关闭连接
 
-	this.handler(conn)
+	t.handler(conn)
 } // }}}

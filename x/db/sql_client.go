@@ -30,42 +30,42 @@ type SqlClient struct {
 	id       string
 }
 
-func (this *SqlClient) SetDB(dbt string, _db *sql.DB) error { // {{{
-	this.dbType = dbt
-	this.db = _db
-	this.executor = &DbExecutor{this.db}
+func (s *SqlClient) SetDB(dbt string, _db *sql.DB) error { // {{{
+	s.dbType = dbt
+	s.db = _db
+	s.executor = &DbExecutor{s.db}
 
 	return nil
 } // }}}
 
-func (this *SqlClient) Close() { //{{{
-	this.db.Close()
+func (s *SqlClient) Close() { //{{{
+	s.db.Close()
 } //}}}
 
-func (this *SqlClient) Ping(ctx context.Context) error { //{{{
-	return this.db.PingContext(ctx)
+func (s *SqlClient) Ping(ctx context.Context) error { //{{{
+	return s.db.PingContext(ctx)
 } //}}}
 
-func (this *SqlClient) SetDebug(open bool) { //{{{
-	this.Debug = open
+func (s *SqlClient) SetDebug(open bool) { //{{{
+	s.Debug = open
 } //}}}
 
-func (this *SqlClient) Type() string { //{{{
-	return this.dbType
+func (s *SqlClient) Type() string { //{{{
+	return s.dbType
 } //}}}
 
-func (this *SqlClient) ID() string { //{{{
-	if this.id == "" {
-		id := fmt.Sprintf("%p", &this.db)
-		this.id = id[max(0, len(id)-5):]
+func (s *SqlClient) ID() string { //{{{
+	if s.id == "" {
+		id := fmt.Sprintf("%p", &s.db)
+		s.id = id[max(0, len(id)-5):]
 	}
 
-	return this.id
+	return s.id
 } //}}}
 
-func (this *SqlClient) Begin(is_readonly bool) (DBClient, error) { // {{{
-	//tx, err := this.db.Begin()
-	tx, err := this.db.BeginTx(context.Background(), &sql.TxOptions{
+func (s *SqlClient) Begin(is_readonly bool) (DBClient, error) { // {{{
+	//tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{
 		ReadOnly: is_readonly,
 	})
 
@@ -73,57 +73,57 @@ func (this *SqlClient) Begin(is_readonly bool) (DBClient, error) { // {{{
 		return nil, errorHandle(fmt.Errorf("trans error:%v", err))
 	}
 
-	if this.Debug {
+	if s.Debug {
 		if is_readonly {
-			log.Println("Begin readonly transaction on #ID:", this.ID())
+			log.Println("Begin readonly transaction on #ID:", s.ID())
 		} else {
-			log.Println("Begin transaction on #ID:", this.ID())
+			log.Println("Begin transaction on #ID:", s.ID())
 		}
 	}
 
 	return &SqlClient{
-		db:       this.db,
+		db:       s.db,
 		executor: &TxExecutor{tx},
 		tx:       tx,
 		intx:     true,
-		Debug:    this.Debug,
-		p:        this,
+		Debug:    s.Debug,
+		p:        s,
 	}, nil
 } // }}}
 
-func (this *SqlClient) Rollback() error { // {{{
-	if this.intx && nil != this.tx {
-		this.intx = false
-		err := this.tx.Rollback()
+func (s *SqlClient) Rollback() error { // {{{
+	if s.intx && nil != s.tx {
+		s.intx = false
+		err := s.tx.Rollback()
 		if err != nil {
 			return errorHandle(fmt.Errorf("trans rollback error:%v", err))
 		}
 
-		if this.Debug {
-			log.Println("Rollback transaction on #ID:", this.ID())
+		if s.Debug {
+			log.Println("Rollback transaction on #ID:", s.ID())
 		}
 	}
 
 	return nil
 } // }}}
 
-func (this *SqlClient) Commit() error { // {{{
-	if this.intx && nil != this.tx {
-		this.intx = false
-		err := this.tx.Commit()
+func (s *SqlClient) Commit() error { // {{{
+	if s.intx && nil != s.tx {
+		s.intx = false
+		err := s.tx.Commit()
 		if err != nil {
 			return errorHandle(fmt.Errorf("trans commit error:%v", err))
 		}
 
-		if this.Debug {
-			log.Println("Commit transaction on #ID:", this.ID())
+		if s.Debug {
+			log.Println("Commit transaction on #ID:", s.ID())
 		}
 	}
 
 	return nil
 } // }}}
 
-func (this *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { // {{{
+func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { // {{{
 	if len(vals) == 0 {
 		return 0, nil
 	}
@@ -173,7 +173,7 @@ func (this *SqlClient) Insert(table string, vals ...map[string]any) (int, error)
 	buf.WriteString(strings.Join(placeholders, ", "))
 
 	sqlstr := buf.String()
-	result, err := this.Exec(sqlstr, args...)
+	result, err := s.Exec(sqlstr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -190,7 +190,7 @@ func (this *SqlClient) Insert(table string, vals ...map[string]any) (int, error)
 	return int(lastid), nil
 } // }}}
 
-func (this *SqlClient) Update(table string, vals map[string]interface{}, where string, val ...interface{}) (int, error) { // {{{
+func (s *SqlClient) Update(table string, vals map[string]interface{}, where string, val ...interface{}) (int, error) { // {{{
 	buf := bytes.NewBufferString("update ")
 
 	buf.WriteString(table)
@@ -220,7 +220,7 @@ func (this *SqlClient) Update(table string, vals map[string]interface{}, where s
 	sqlstr := buf.String()
 
 	value = append(value, val...)
-	result, err := this.Exec(sqlstr, value...)
+	result, err := s.Exec(sqlstr, value...)
 	if err != nil {
 		return 0, err
 	}
@@ -233,7 +233,7 @@ func (this *SqlClient) Update(table string, vals map[string]interface{}, where s
 	return int(affect), nil
 } // }}}
 
-func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...string) (int, error) { // {{{
+func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...string) (int, error) { // {{{
 	if len(vals) == 0 {
 		return 0, nil
 	}
@@ -280,7 +280,7 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 	buf.WriteString(strings.Join(updateParts, ", "))
 
 	sqlstr := buf.String()
-	result, err := this.Exec(sqlstr, args...)
+	result, err := s.Exec(sqlstr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -296,10 +296,10 @@ func (this *SqlClient) Upsert(table string, vals map[string]any, ignore_fields .
 	return int(lastid), nil
 } // }}}
 
-func (this *SqlClient) Delete(options ...FnSqlOption) (int, error) { // {{{
+func (s *SqlClient) Delete(options ...FnSqlOption) (int, error) { // {{{
 	var sb strings.Builder
 
-	so := this.parseOptions(options)
+	so := s.parseOptions(options)
 
 	sb.WriteString("DELETE")
 
@@ -323,11 +323,11 @@ func (this *SqlClient) Delete(options ...FnSqlOption) (int, error) { // {{{
 		sb.WriteString(so.limits)
 	}
 
-	return this.Execute(sb.String(), so.vals...)
+	return s.Execute(sb.String(), so.vals...)
 } // }}}
 
-func (this *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
-	result, err := this.Exec(sqlstr, val...)
+func (s *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
+	result, err := s.Exec(sqlstr, val...)
 	if err != nil {
 		return 0, err
 	}
@@ -340,50 +340,50 @@ func (this *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
 	return int(affect), nil
 } // }}}
 
-func (this *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, err error) { // {{{
+func (s *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, err error) { // {{{
 	var start_time time.Time
-	if this.Debug {
+	if s.Debug {
 		start_time = time.Now()
 	}
 
-	result, err = this.executor.Exec(sqlstr, val...)
+	result, err = s.executor.Exec(sqlstr, val...)
 
-	if this.Debug {
-		log.Println(map[string]interface{}{"tx": this.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": this.id})
+	if s.Debug {
+		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.id})
 	}
 
 	return result, errorHandle(err)
 } // }}}
 
-func (this *SqlClient) GetOne(options ...FnSqlOption) (any, error) { // {{{
+func (s *SqlClient) GetOne(options ...FnSqlOption) (any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := this.prepareSql(options)
-	return this.QueryOne(sqlstr, vals...)
+	sqlstr, vals := s.prepareSql(options)
+	return s.QueryOne(sqlstr, vals...)
 } // }}}
 
-func (this *SqlClient) GetRow(options ...FnSqlOption) (map[string]any, error) { // {{{
+func (s *SqlClient) GetRow(options ...FnSqlOption) (map[string]any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := this.prepareSql(options)
-	return this.QueryRow(sqlstr, vals...)
+	sqlstr, vals := s.prepareSql(options)
+	return s.QueryRow(sqlstr, vals...)
 } // }}}
 
-func (this *SqlClient) GetAll(options ...FnSqlOption) ([]map[string]any, error) { //{{{
-	sqlstr, vals := this.prepareSql(options)
-	return this.Query(sqlstr, vals...)
+func (s *SqlClient) GetAll(options ...FnSqlOption) ([]map[string]any, error) { //{{{
+	sqlstr, vals := s.prepareSql(options)
+	return s.Query(sqlstr, vals...)
 } // }}}
 
-func (this *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
+func (s *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
 	var name any
 	var err error
 
 	var start_time time.Time
-	if this.Debug {
+	if s.Debug {
 		start_time = time.Now()
 	}
 
-	err = this.executor.QueryRow(sqlstr, vals...).Scan(&name)
-	if this.Debug {
-		log.Println(map[string]any{"tx": this.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": this.ID()})
+	err = s.executor.QueryRow(sqlstr, vals...).Scan(&name)
+	if s.Debug {
+		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
 	}
 
 	if err != nil {
@@ -397,8 +397,8 @@ func (this *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{
 	return name, nil
 } // }}}
 
-func (this *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error) { // {{{
-	iter, err := this.QueryStream(sqlstr, vals...)
+func (s *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error) { // {{{
+	iter, err := s.QueryStream(sqlstr, vals...)
 	if err != nil {
 		return nil, errorHandle(err)
 	}
@@ -415,8 +415,8 @@ func (this *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, err
 	return make(map[string]any, 0), nil
 } // }}}
 
-func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) { //{{{
-	iter, err := this.QueryStream(sqlstr, val...)
+func (s *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) { //{{{
+	iter, err := s.QueryStream(sqlstr, val...)
 	if err != nil {
 		return nil, errorHandle(err)
 	}
@@ -430,21 +430,21 @@ func (this *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error
 } // }}}
 
 // 返回迭代器
-func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) { //{{{
+func (s *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) { //{{{
 	//分析sql,如果使用了select SQL_CALC_FOUND_ROWS, 分析语句会干扰结果，所以放在真正查询的前面
-	if this.Debug {
-		this.explain(sqlstr, val...)
+	if s.Debug {
+		s.explain(sqlstr, val...)
 	}
 
 	var start_time time.Time
-	if this.Debug {
+	if s.Debug {
 		start_time = time.Now()
 	}
 
-	rows, err := this.executor.Query(sqlstr, val...)
+	rows, err := s.executor.Query(sqlstr, val...)
 
-	if this.Debug {
-		log.Println(map[string]interface{}{"tx": this.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": this.ID()})
+	if s.Debug {
+		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.ID()})
 	}
 
 	if err != nil {
@@ -454,7 +454,7 @@ func (this *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) 
 	return newRowIter(rows)
 } // }}}
 
-func (this *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
+func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 	so := &SqlOption{}
 	for _, opt := range options {
 		opt(so)
@@ -463,19 +463,19 @@ func (this *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 	return so
 } // }}}
 
-func (this *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
-	return this.parseOptions(options).ToSql()
+func (s *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
+	return s.parseOptions(options).ToSql()
 } // }}}
 
-func (this *SqlClient) explain(sqlstr string, val ...any) { //{{{
+func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
 	if strings.HasPrefix(sqlstr, "select") {
 		expl_results := []map[string]interface{}{}
-		if this.intx {
-			expl_results, _ = this.p.Query("explain "+sqlstr, val...)
+		if s.intx {
+			expl_results, _ = s.p.Query("explain "+sqlstr, val...)
 		} else {
-			expl_results, _ = this.Query("explain "+sqlstr, val...)
+			expl_results, _ = s.Query("explain "+sqlstr, val...)
 		}
-		expl := &SqlExplain{this.dbType, expl_results}
+		expl := &SqlExplain{s.dbType, expl_results}
 		expl.DrawConsole()
 	}
 } // }}}

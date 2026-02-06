@@ -138,7 +138,3 @@ func (h *HTTP) HttpFinal() { // {{{
 	//将 ctx 写回 http.Request, 供中间件使用
 	*h.R = *h.R.WithContext(h.Ctx)
 } // }}}
-
-// 用户回调方法, 可在业务代码中重写
-func (h *HTTP) Final() { // {{{
-} // }}}

@@ -62,28 +62,28 @@ func (r *HttpResponse) GetHeader() http.Header {
 	return r.header
 }
 
-func (this *HttpClient) Get(requrl string, headers ...http.Header) (*HttpResponse, error) { // {{{
-	return this.Request("GET", requrl, nil, headers...)
+func (h *HttpClient) Get(requrl string, headers ...http.Header) (*HttpResponse, error) { // {{{
+	return h.Request("GET", requrl, nil, headers...)
 } //}}}
 
-func (this *HttpClient) Post(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
-	return this.Request("POST", requrl, post_data, headers...)
+func (h *HttpClient) Post(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
+	return h.Request("POST", requrl, post_data, headers...)
 } //}}}
 
-func (this *HttpClient) Delete(requrl string, headers ...http.Header) (*HttpResponse, error) { // {{{
-	return this.Request("DELETE", requrl, nil, headers...)
+func (h *HttpClient) Delete(requrl string, headers ...http.Header) (*HttpResponse, error) { // {{{
+	return h.Request("DELETE", requrl, nil, headers...)
 } //}}}
 
-func (this *HttpClient) Put(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
-	return this.Request("PUT", requrl, post_data, headers...)
+func (h *HttpClient) Put(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
+	return h.Request("PUT", requrl, post_data, headers...)
 } //}}}
 
-func (this *HttpClient) Patch(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
-	return this.Request("PATCH", requrl, post_data, headers...)
+func (h *HttpClient) Patch(requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
+	return h.Request("PATCH", requrl, post_data, headers...)
 } //}}}
 
 // post_data 支持map[string]interface{} 和 io.Reader 两种参数类型
-func (this *HttpClient) Request(method, requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
+func (h *HttpClient) Request(method, requrl string, post_data interface{}, headers ...http.Header) (*HttpResponse, error) { // {{{
 	var header http.Header
 	var setHost = ""
 	has_content_type := false
@@ -141,7 +141,7 @@ func (this *HttpClient) Request(method, requrl string, post_data interface{}, he
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
-	resp, err := this.client.Do(req)
+	resp, err := h.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
