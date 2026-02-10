@@ -1,9 +1,9 @@
 package db
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 type RowIter struct {
@@ -12,10 +12,11 @@ type RowIter struct {
 	scanArgs []any
 	values   []any
 	closed   bool
+	useBytes bool //  是否保留 []byte, sql.RawBytes  字段值类型, 默认转为 string
 }
 
 // 私有方法,  由QueryStream 调用
-func newRowIter(rows *sql.Rows) (*RowIter, error) { // {{{
+func newRowIter(rows *sql.Rows, use_bytes bool) (*RowIter, error) { // {{{
 	cols, err := rows.Columns()
 	if err != nil {
 		rows.Close()
@@ -33,6 +34,7 @@ func newRowIter(rows *sql.Rows) (*RowIter, error) { // {{{
 		cols:     cols,
 		scanArgs: scanArgs,
 		values:   values,
+		useBytes: use_bytes,
 	}, nil
 } // }}}
 
@@ -65,19 +67,8 @@ func (it *RowIter) Foreach(fn func(map[string]any) error, limits ...int) error {
 		}
 
 		row := make(map[string]any, len(it.cols))
-		for i, col := range it.values {
-			colkey := it.cols[i]
-			//处理返回多表字段时，字段名带前缀的问题
-			li := strings.LastIndex(colkey, ".")
-			if li > -1 {
-				colkey = colkey[li+1:]
-			}
-
-			if colval, ok := col.(sql.RawBytes); ok {
-				row[colkey] = string(colval)
-			} else {
-				row[colkey] = col
-			}
+		for i := range it.values {
+			row[it.cols[i]] = parseValue(it.values[i], it.useBytes)
 		}
 
 		if err := fn(row); err != nil {
@@ -119,4 +110,67 @@ func (it *RowIter) Close() error { // {{{
 
 	it.closed = true
 	return it.rows.Close()
+} // }}}
+
+func parseValue(val any, use_bytes bool) any { // {{{
+	if val == nil {
+		return nil
+	}
+
+	switch v := val.(type) {
+	case sql.RawBytes:
+		if use_bytes {
+			return bytes.Clone(v)
+		}
+		return string(v)
+	case []byte:
+		if use_bytes {
+			return bytes.Clone(v)
+		}
+		return string(v)
+	case sql.NullString:
+		if v.Valid {
+			return v.String
+		}
+		return nil
+	case sql.NullInt16:
+		if v.Valid {
+			return v.Int16
+		}
+		return nil
+	case sql.NullInt32:
+		if v.Valid {
+			return v.Int32
+		}
+		return nil
+	case sql.NullInt64:
+		if v.Valid {
+			return v.Int64
+		}
+		return nil
+	case sql.NullFloat64:
+		if v.Valid {
+			return v.Float64
+		}
+		return nil
+	case sql.NullBool:
+		if v.Valid {
+			return v.Bool
+		}
+		return nil
+	case sql.NullTime:
+		if v.Valid {
+			return v.Time
+		}
+		return nil
+	case sql.NullByte:
+		if v.Valid {
+			return v.Byte
+		}
+		return nil
+	default:
+		return v
+	}
+
+	return val
 } // }}}

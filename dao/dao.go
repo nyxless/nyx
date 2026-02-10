@@ -37,6 +37,7 @@ type Dao struct {
 	cacheCallbackFn      CacheCallbackFn
 	hit                  bool      // 是否命中缓存
 	cacheTime            time.Time // 临时存放缓存时间
+	useBytes             bool      // 是否保留 []byte, sql.RawBytes  字段值类型, 默认转为 string
 }
 
 // 缓存更新成功后回调函数, any 参数类型和当前调用的查询方法返回数据类型一致, 如 GetRecord: map[string]any, GetRecords: []map[string]any
@@ -218,8 +219,8 @@ func (d *Dao) getIndex() string { // {{{
 // 强制使用主库
 func (d *Dao) UseMaster(flag ...bool) *Dao { // {{{
 	use := true
-	if len(flag) > 0 {
-		use = flag[0]
+	if len(flag) > 0 && !flag[0] {
+		use = false
 	}
 
 	d.forceMaster = use
@@ -288,10 +289,13 @@ func (d *Dao) Order(order ...string) *Dao { // {{{
 	return d
 } // }}}
 
-func (d *Dao) getOrder(use_auto_order bool) string { // {{{
+func (d *Dao) getOrder(alias string, use_auto_order bool) string { // {{{
 	order := d.order
 	if "" == order && use_auto_order && d.autoOrder {
 		order = d.GetPrimary() + " desc"
+		if alias != "" {
+			order = alias + "." + order
+		}
 	}
 
 	d.order = ""
@@ -320,6 +324,23 @@ func (d *Dao) Limit(limit int, limits ...int) *Dao { // {{{
 	}
 
 	return d
+} // }}}
+
+func (d *Dao) WithBytes(flag ...bool) *Dao { // {{{
+	use := true
+	if len(flag) > 0 && !flag[0] {
+		use = false
+	}
+
+	d.useBytes = use
+	return d
+} // }}}
+
+func (d *Dao) getUseBytes() bool { // {{{
+	use_bytes := d.useBytes
+	d.useBytes = false
+
+	return use_bytes
 } // }}}
 
 func (d *Dao) getLimit() string { // {{{
@@ -470,22 +491,86 @@ func (d *Dao) Execute(sql string, params ...any) (int, error) { //{{{
 
 // 在从库执行 sql 查询单字段, 返回 any
 func (d *Dao) QueryOne(sql string, params ...any) (any, error) { //{{{
-	return d.GetDBReader().QueryOne(sql, params...)
+	sqlOptions := []db.FnSqlOption{
+		db.WithSql(sql, params),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		val, err := d.GetDBReader().QueryOne(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, val, err
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 } // }}}
 
 // 在从库执行 sql 查询单行, 返回 Map
 func (d *Dao) QueryRow(sql string, params ...any) (map[string]any, error) { //{{{
-	return d.GetDBReader().QueryRow(sql, params...)
+	sqlOptions := []db.FnSqlOption{
+		db.WithSql(sql, params),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		row, err := d.GetDBReader().QueryRow(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, row, err
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(map[string]any), nil
 } // }}}
 
 // 在从库执行 sql 查询, 返回 MapSlice
 func (d *Dao) Query(sql string, params ...any) ([]map[string]any, error) { //{{{
-	return d.GetDBReader().Query(sql, params...)
+	sqlOptions := []db.FnSqlOption{
+		db.WithSql(sql, params),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		data, err := d.GetDBReader().Query(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, data, err
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.([]map[string]any), nil
 } // }}}
 
-// 返回迭代器
+// 返回迭代器, 不支持 cache
 func (d *Dao) QueryStream(sql string, params ...any) (*db.RowIter, error) { //{{{
-	return d.GetDBReader().QueryStream(sql, params...)
+	sqlOptions := []db.FnSqlOption{
+		db.WithSql(sql, params),
+		db.WithBytes(d.getUseBytes()),
+	}
+	return d.GetDBReader().QueryStream(sqlOptions...)
 } // }}}
 
 // 插入新记录
@@ -530,6 +615,7 @@ func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 		db.WithLeftJoin(left_join),
 		db.WithInnerJoin(inner_join),
 		db.WithWhere(primary+"=?", []any{id}),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -599,7 +685,7 @@ func (d *Dao) DelRecordBy(params ...any) (int, error) { //{{{
 
 	sqlOptions := []db.FnSqlOption{
 		db.WithTable(d.table),
-		db.WithOrder(d.getOrder(false)),
+		db.WithOrder(d.getOrder("", false)),
 		db.WithWhere(d.getFilter()),
 		db.WithLimits("1"),
 	}
@@ -627,8 +713,9 @@ func (d *Dao) GetOne(field string, params ...any) (any, error) { //{{{
 		db.WithFields(field),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
-		db.WithOrder(d.getOrder(false)),
+		db.WithOrder(d.getOrder("", false)),
 		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -652,8 +739,9 @@ func (d *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 		db.WithFields(field),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
-		db.WithOrder(d.getOrder(false)),
+		db.WithOrder(d.getOrder("", false)),
 		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -694,8 +782,9 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 		db.WithFields(field),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
-		db.WithOrder(d.getOrder(false)),
+		db.WithOrder(d.getOrder("", false)),
 		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -780,6 +869,7 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 		db.WithLeftJoin(left_join),
 		db.WithInnerJoin(inner_join),
 		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -826,11 +916,12 @@ func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 		db.WithAlias(alias),
 		db.WithIdx(idx),
 		db.WithGroup(group),
-		db.WithOrder(d.getOrder(true)),
+		db.WithOrder(d.getOrder(alias, true)),
 		db.WithLimits(d.getLimit()),
 		db.WithLeftJoin(left_join),
 		db.WithInnerJoin(inner_join),
 		db.WithWhere(where, values),
+		db.WithBytes(d.getUseBytes()),
 	}
 
 	getRecordsFn := func() (int, any, error) {
@@ -956,29 +1047,38 @@ func (d *Dao) getCacheKey(opts []db.FnSqlOption) []byte { // {{{
 
 	var sb strings.Builder
 
-	sb.WriteString(so.GetFields())
-	sb.WriteString("#")
-	sb.WriteString(so.GetTable())
-	sb.WriteString("#")
-	sb.WriteString(so.GetAlias())
-	sb.WriteString("#")
-	sb.WriteString(so.GetIdx())
-	sb.WriteString("#")
-	sb.WriteString(strings.Join(so.GetLeftJoin(), ","))
-	sb.WriteString("#")
-	sb.WriteString(strings.Join(so.GetInnerJoin(), ","))
-	sb.WriteString("#")
-	sb.WriteString(so.GetWhere())
-	sb.WriteString("#")
-	sb.WriteString(so.GetGroup())
-	sb.WriteString("#")
-	sb.WriteString(so.GetOrder())
-	sb.WriteString("#")
-	sb.WriteString(so.GetLimits())
+	if sql := so.GetSql(); sql != "" {
+		sb.WriteString(sql)
+		sb.WriteString("#")
+	} else {
+		sb.WriteString(so.GetFields())
+		sb.WriteString("#")
+		sb.WriteString(so.GetTable())
+		sb.WriteString("#")
+		sb.WriteString(so.GetAlias())
+		sb.WriteString("#")
+		sb.WriteString(so.GetIdx())
+		sb.WriteString("#")
+		sb.WriteString(strings.Join(so.GetLeftJoin(), ","))
+		sb.WriteString("#")
+		sb.WriteString(strings.Join(so.GetInnerJoin(), ","))
+		sb.WriteString("#")
+		sb.WriteString(so.GetWhere())
+		sb.WriteString("#")
+		sb.WriteString(so.GetGroup())
+		sb.WriteString("#")
+		sb.WriteString(so.GetOrder())
+		sb.WriteString("#")
+		sb.WriteString(so.GetLimits())
+	}
 
 	for _, v := range so.GetVals() {
 		sb.WriteString(",")
 		sb.WriteString(x.AsString(v))
+	}
+
+	if so.GetUseBytes() {
+		sb.WriteString("#1")
 	}
 
 	return []byte(sb.String())

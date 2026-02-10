@@ -6,6 +6,8 @@ import (
 
 type Options = redis.UniversalOptions
 
+const Nil = redis.Nil
+
 func NewRedisClient(options *Options) *RedisClient { // {{{
 	return &RedisClient{
 		UniversalClient: redis.NewUniversalClient(options),

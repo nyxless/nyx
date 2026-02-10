@@ -58,6 +58,20 @@ func RandIntn(n int) int {
 	return int(RandUint32()) % n
 }
 
+// 返回[min,max)范围内的随机整数
+func RandInt(min, max int) int { // {{{
+	if min >= max {
+		return min
+	}
+
+	rangeSize := max - min
+	if rangeSize <= 0 {
+		return RandIntn(1<<31) + min
+	}
+
+	return RandIntn(rangeSize) + min
+} // }}}
+
 func rand(size int, kind int) []byte { // {{{
 	ikind, kinds, result := kind, [][]int{[]int{10, 48}, []int{26, 97}, []int{26, 65}}, make([]byte, size)
 	is_all := kind > 2 || kind < 0

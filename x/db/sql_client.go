@@ -357,23 +357,23 @@ func (s *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, 
 
 func (s *SqlClient) GetOne(options ...FnSqlOption) (any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := s.prepareSql(options)
-	return s.QueryOne(sqlstr, vals...)
+	return s.QueryOne(options...)
 } // }}}
 
 func (s *SqlClient) GetRow(options ...FnSqlOption) (map[string]any, error) { // {{{
 	options = append(options, WithLimits("1"))
-	sqlstr, vals := s.prepareSql(options)
-	return s.QueryRow(sqlstr, vals...)
+	return s.QueryRow(options...)
 } // }}}
 
 func (s *SqlClient) GetAll(options ...FnSqlOption) ([]map[string]any, error) { //{{{
-	sqlstr, vals := s.prepareSql(options)
-	return s.Query(sqlstr, vals...)
+	return s.Query(options...)
 } // }}}
 
-func (s *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
-	var name any
+func (s *SqlClient) QueryOne(options ...FnSqlOption) (any, error) { // {{{
+	sqlOption := s.parseOptions(options)
+	sqlstr, vals := sqlOption.ToSql()
+
+	var value any
 	var err error
 
 	var start_time time.Time
@@ -381,7 +381,7 @@ func (s *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
 		start_time = time.Now()
 	}
 
-	err = s.executor.QueryRow(sqlstr, vals...).Scan(&name)
+	err = s.executor.QueryRow(sqlstr, vals...).Scan(&value)
 	if s.Debug {
 		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
 	}
@@ -394,11 +394,11 @@ func (s *SqlClient) QueryOne(sqlstr string, vals ...any) (any, error) { // {{{
 		}
 	}
 
-	return name, nil
+	return parseValue(value, sqlOption.useBytes), nil
 } // }}}
 
-func (s *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error) { // {{{
-	iter, err := s.QueryStream(sqlstr, vals...)
+func (s *SqlClient) QueryRow(options ...FnSqlOption) (map[string]any, error) { // {{{
+	iter, err := s.QueryStream(options...)
 	if err != nil {
 		return nil, errorHandle(err)
 	}
@@ -415,8 +415,8 @@ func (s *SqlClient) QueryRow(sqlstr string, vals ...any) (map[string]any, error)
 	return make(map[string]any, 0), nil
 } // }}}
 
-func (s *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) { //{{{
-	iter, err := s.QueryStream(sqlstr, val...)
+func (s *SqlClient) Query(options ...FnSqlOption) ([]map[string]any, error) { //{{{
+	iter, err := s.QueryStream(options...)
 	if err != nil {
 		return nil, errorHandle(err)
 	}
@@ -430,7 +430,10 @@ func (s *SqlClient) Query(sqlstr string, val ...any) ([]map[string]any, error) {
 } // }}}
 
 // 返回迭代器
-func (s *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) { //{{{
+func (s *SqlClient) QueryStream(options ...FnSqlOption) (*RowIter, error) { //{{{
+	sqlOption := s.parseOptions(options)
+	sqlstr, val := sqlOption.ToSql()
+
 	//分析sql,如果使用了select SQL_CALC_FOUND_ROWS, 分析语句会干扰结果，所以放在真正查询的前面
 	if s.Debug {
 		s.explain(sqlstr, val...)
@@ -451,7 +454,7 @@ func (s *SqlClient) QueryStream(sqlstr string, val ...any) (*RowIter, error) { /
 		return nil, errorHandle(err)
 	}
 
-	return newRowIter(rows)
+	return newRowIter(rows, sqlOption.useBytes)
 } // }}}
 
 func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
@@ -463,17 +466,16 @@ func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 	return so
 } // }}}
 
-func (s *SqlClient) prepareSql(options []FnSqlOption) (string, []any) { //{{{
-	return s.parseOptions(options).ToSql()
-} // }}}
-
 func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
 	if strings.HasPrefix(sqlstr, "select") {
 		expl_results := []map[string]interface{}{}
+		sqlOptions := []FnSqlOption{
+			WithSql("explain "+sqlstr, val),
+		}
 		if s.intx {
-			expl_results, _ = s.p.Query("explain "+sqlstr, val...)
+			expl_results, _ = s.p.Query(sqlOptions...)
 		} else {
-			expl_results, _ = s.Query("explain "+sqlstr, val...)
+			expl_results, _ = s.Query(sqlOptions...)
 		}
 		expl := &SqlExplain{s.dbType, expl_results}
 		expl.DrawConsole()

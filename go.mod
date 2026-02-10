@@ -1,14 +1,13 @@
 module github.com/nyxless/nyx
 
-go 1.23.0
-
-toolchain go1.23.1
+go 1.23
 
 require (
 	github.com/bytedance/sonic v1.13.2
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coocood/freecache v1.2.4
 	github.com/go-sql-driver/mysql v1.9.2
+	github.com/nyxless/nyxc v0.0.0-20260204072351-767f4670bbc9
 	github.com/redis/go-redis/v9 v9.8.0
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0

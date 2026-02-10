@@ -50,10 +50,10 @@ type DBClient interface {
 	GetOne(sqlOptions ...FnSqlOption) (any, error)
 	GetRow(sqlOptions ...FnSqlOption) (map[string]any, error)
 	GetAll(sqlOptions ...FnSqlOption) ([]map[string]any, error)
-	QueryOne(sqlstr string, vals ...any) (any, error)
-	QueryRow(sqlstr string, vals ...any) (map[string]any, error)
-	Query(sqlstr string, vals ...any) ([]map[string]any, error)
-	QueryStream(sqlstr string, vals ...any) (*RowIter, error)
+	QueryOne(sqlOptions ...FnSqlOption) (any, error)
+	QueryRow(sqlOptions ...FnSqlOption) (map[string]any, error)
+	Query(sqlOptions ...FnSqlOption) ([]map[string]any, error)
+	QueryStream(sqlOptions ...FnSqlOption) (*RowIter, error)
 }
 
 type FnSqlOption func(*SqlOption)
@@ -69,17 +69,29 @@ type SqlOption struct {
 	order     string
 	limits    string
 	where     string
+	sql       string //将忽略以上的配置
 	vals      []any
+	useBytes  bool //独立配置，是否保留[]byte,sql.RawBytes 字段类型，默认转换为 string
 }
 
 func (so *SqlOption) ToSql() (string, []any) { //{{{
+	if so.sql != "" {
+		return so.sql, so.vals
+	}
+
 	var sb strings.Builder
 
+	sb.WriteString("SELECT ")
+
 	if so.fields == "" {
+		if so.alias != "" {
+			sb.WriteString(so.alias)
+			sb.WriteString(".")
+		}
+
 		so.fields = "*"
 	}
 
-	sb.WriteString("SELECT ")
 	sb.WriteString(so.fields)
 
 	if so.table != "" {
@@ -175,8 +187,16 @@ func (so *SqlOption) GetWhere() string { // {{{
 	return so.where
 } // }}}
 
+func (so *SqlOption) GetSql() string { // {{{
+	return so.sql
+} // }}}
+
 func (so *SqlOption) GetVals() []any { // {{{
 	return so.vals
+} // }}}
+
+func (so *SqlOption) GetUseBytes() bool { // {{{
+	return so.useBytes
 } // }}}
 
 func WithTable(table string) FnSqlOption { // {{{
@@ -237,6 +257,19 @@ func WithWhere(where string, vals []any) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.where = where
 		s.vals = vals
+	}
+} // }}}
+
+func WithSql(str string, vals []any) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.sql = str
+		s.vals = vals
+	}
+} // }}}
+
+func WithBytes(b bool) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.useBytes = b
 	}
 } // }}}
 
