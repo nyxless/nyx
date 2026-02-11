@@ -85,12 +85,12 @@ func (r *RedisProxy) add(conf MAP, key string) (*redis.RedisClient, error) { //{
 		DialTimeout: 3 * time.Second,
 	}
 
-	var to_cluster bool
-	if v, ok := conf["to_cluster"]; ok {
-		to_cluster = AsBool(v)
+	var is_cluster bool
+	if v, ok := conf["is_cluster"]; ok {
+		is_cluster = AsBool(v)
 	}
 
-	options.ToCluster = to_cluster || len(hosts) > 1
+	options.IsClusterMode = is_cluster || len(hosts) > 1
 
 	if timeout, ok := conf["timeout"]; ok {
 		options.DialTimeout = time.Duration(AsInt(timeout)) * time.Second
