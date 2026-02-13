@@ -17,7 +17,7 @@ var (
 
 	//系统错误码
 	ERR_OTHER          = NewErr(10, "%+v")
-	ERR_SYSTEM         = NewErr(11, "CN", "系统错误", "EN", "system error")
+	ERR_SYSTEM         = NewErr(11, "CN", "系统错误", "EN", "System error. Please try again later.")
 	ERR_METHOD_INVALID = NewErr(12, "CN", "请求不合法: %+v", "EN", "invalid request: %+v")
 	ERR_PARAMS         = NewErr(13, "CN", "参数错误: %+v", "EN", "invalid param: %+v")
 	ERR_AUTH           = NewErr(14, "CN", "认证失败", "EN", "request unauthorized")

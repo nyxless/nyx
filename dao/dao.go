@@ -1021,7 +1021,7 @@ func (d *Dao) getFromCache(fn func() (int, any, error), opts []db.FnSqlOption, t
 				return err
 			}
 
-			return callbackFn(cache_data)
+			return callbackFn(cache_data.Res)
 		}
 	}
 
