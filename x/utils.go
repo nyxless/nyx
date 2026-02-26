@@ -98,6 +98,10 @@ func RandStr(size int, kind ...int) string { // {{{
 func JsonEncodeToBytes(data any) []byte { // {{{
 	content, err := json.MarshalIndent(data, "", "")
 	if err != nil {
+		if Debug {
+			Notice("JsonEncodeToBytes err:", err)
+		}
+
 		return nil
 	}
 
@@ -108,6 +112,10 @@ func JsonDecodeBytes(data []byte) any { // {{{
 	var obj any
 	err := json.Unmarshal(data, &obj)
 	if err != nil {
+		if Debug {
+			Notice("JsonDecodeBytes err:", err)
+		}
+
 		return nil
 	}
 

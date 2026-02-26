@@ -40,17 +40,20 @@ func (s *SqlExplain) DrawConsole() { /*{{{*/
 		records[i] = []string{}
 
 		for j, v := range fields {
+			var val string
 			if record[v] == nil {
-				record[v] = " "
+				val = " "
+			} else {
+				val = fmt.Sprintf("%v", record[v])
 			}
 
 			if arr_max_length[j] > 0 {
-				arr_max_length[j] = int(math.Max(float64(arr_max_length[j]), float64(len(record[v].(string))+2)))
+				arr_max_length[j] = int(math.Max(float64(arr_max_length[j]), float64(len(val)+2)))
 			} else {
-				arr_max_length[j] = len(record[v].(string)) + 2
+				arr_max_length[j] = len(val) + 2
 			}
 
-			records[i] = append(records[i], record[v].(string))
+			records[i] = append(records[i], val)
 		}
 	}
 

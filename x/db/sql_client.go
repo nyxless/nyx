@@ -384,6 +384,7 @@ func (s *SqlClient) QueryOne(options ...FnSqlOption) (any, error) { // {{{
 	err = s.executor.QueryRow(sqlstr, vals...).Scan(&value)
 	if s.Debug {
 		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
+		s.explain(sqlstr, vals...)
 	}
 
 	if err != nil {
@@ -432,22 +433,18 @@ func (s *SqlClient) Query(options ...FnSqlOption) ([]map[string]any, error) { //
 // 返回迭代器
 func (s *SqlClient) QueryStream(options ...FnSqlOption) (*RowIter, error) { //{{{
 	sqlOption := s.parseOptions(options)
-	sqlstr, val := sqlOption.ToSql()
-
-	//分析sql,如果使用了select SQL_CALC_FOUND_ROWS, 分析语句会干扰结果，所以放在真正查询的前面
-	if s.Debug {
-		s.explain(sqlstr, val...)
-	}
+	sqlstr, vals := sqlOption.ToSql()
 
 	var start_time time.Time
 	if s.Debug {
 		start_time = time.Now()
 	}
 
-	rows, err := s.executor.Query(sqlstr, val...)
+	rows, err := s.executor.Query(sqlstr, vals...)
 
 	if s.Debug {
-		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.ID()})
+		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
+		s.explain(sqlstr, vals...)
 	}
 
 	if err != nil {
@@ -467,7 +464,7 @@ func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 } // }}}
 
 func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
-	if strings.HasPrefix(sqlstr, "select") {
+	if len(sqlstr) > 6 && bytes.EqualFold([]byte(sqlstr)[0:6], []byte("SELECT")) {
 		expl_results := []map[string]interface{}{}
 		sqlOptions := []FnSqlOption{
 			WithSql("explain "+sqlstr, val),
