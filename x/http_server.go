@@ -11,7 +11,6 @@ import (
 	_ "net/http/pprof"
 	"reflect"
 	//"runtime"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -62,17 +61,8 @@ func SetHttpMaxHeaderBytes(m int) { // {{{
 	}
 } // }}}
 
-func NewHttpServer(addr string, port, rtimeout, wtimeout int, useGraceful, enable_pprof, enable_static bool, static_path, static_root string) *HttpServer { // {{{
-	if "" != static_root && !filepath.IsAbs(static_root) {
-		static_root = filepath.Join(AppRoot, static_root)
-	}
-
+func NewHttpServer() *HttpServer { // {{{
 	server := &HttpServer{
-		addr:           addr,
-		port:           port,
-		rtimeout:       rtimeout,
-		wtimeout:       wtimeout,
-		useGraceful:    useGraceful,
 		maxHeaderBytes: defaultHttpMaxHeaderBytes,
 		handler: &httpHandler{
 			routeMap:      make(map[string]map[string]reflect.Type),
@@ -80,10 +70,6 @@ func NewHttpServer(addr string, port, rtimeout, wtimeout int, useGraceful, enabl
 			routeFuncs:    defaultRouteApiFuncs,
 			groupHandlers: make(map[string]http.HandlerFunc),
 			methodRule:    make(map[string]map[string]map[string]struct{}),
-			enablePprof:   enable_pprof,
-			enableStatic:  enable_static,
-			staticPath:    "/" + strings.Trim(static_path, "/"),
-			staticRoot:    static_root,
 		},
 	}
 
@@ -95,31 +81,26 @@ func NewHttpServer(addr string, port, rtimeout, wtimeout int, useGraceful, enabl
 } // }}}
 
 type HttpServer struct {
-	addr           string
-	port           int
-	rtimeout       int
-	wtimeout       int
-	useGraceful    bool
 	maxHeaderBytes int
 	handler        *httpHandler
 }
 
-func (hs *HttpServer) Run() {
+func (hs *HttpServer) Run() { // {{{
 	if len(hs.handler.routeMap) == 0 {
 		Warn("Api controller was not found, pls add controller using func `AddApi` or shell `nyx init`")
 		return
 	}
 
 	//runtime.GOMAXPROCS(runtime.NumCPU())
-	addr := fmt.Sprintf("%s:%d", hs.addr, hs.port)
+	addr := fmt.Sprintf("%s:%d", Conf.GetString("http_sever", "addr"), Conf.GetDefInt(80, "http_server", "port"))
 
 	Info("HttpServer Listen", addr)
 
-	rtimeout := time.Duration(hs.rtimeout) * time.Millisecond
-	wtimeout := time.Duration(hs.wtimeout) * time.Millisecond
+	rtimeout := time.Duration(Conf.GetDefInt(60000, "http_server", "read_timeout")) * time.Millisecond
+	wtimeout := time.Duration(Conf.GetDefInt(60000, "http_server", "write_timeout")) * time.Millisecond
 
 	//使用endless, 支持graceful reload
-	if hs.useGraceful {
+	if Conf.GetDefBool(true, "http_server", "use_graceful") {
 		Warn(endless.ListenAndServe(addr, hs.handler, rtimeout, wtimeout, hs.maxHeaderBytes))
 	} else {
 		server := &http.Server{
@@ -132,7 +113,7 @@ func (hs *HttpServer) Run() {
 
 		Warn(server.ListenAndServe())
 	}
-}
+} // }}}
 
 // controller中以此后缀结尾的方法会参与路由
 const CONTROLLER_SUFFIX = "Controller"
@@ -144,10 +125,6 @@ type httpHandler struct {
 	routeFuncs    map[string]map[string]http.HandlerFunc    //controller.action 函数缓存, 替换反射调用
 	groupHandlers map[string]http.HandlerFunc               //group buildHttpMiddlewares 后的函数缓存
 	methodRule    map[string]map[string]map[string]struct{} //r.Method 校验
-	enablePprof   bool                                      //是否解析静态资源
-	enableStatic  bool                                      //是否解析静态资源
-	staticPath    string                                    //静态资源访问路径前缀
-	staticRoot    string                                    //静态资源文件根目录
 }
 
 func (h *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { // {{{
@@ -177,14 +154,17 @@ func (h *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { // {{
 	var group, controller_name, action_name string
 	var url_values MAPS
 
-	if h.enablePprof && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
+	if ConfPprofEnabled && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
 		h.monitorPprof(rw, r)
 		return
-	} else if h.enableStatic && strings.HasPrefix(r.URL.Path, h.staticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
+	} else if ConfStaticEnabled && strings.HasPrefix(r.URL.Path, ConfStaticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
 		h.serveFile(rw, r)
 		return
 	} else if strings.HasPrefix(r.URL.Path, "/status") { //用于lvs监控
 		h.monitorStatus(rw, r)
+		return
+	} else if ConfDebugRpcEnabled && strings.HasPrefix(r.URL.Path, "/debug/rpc/") { //如果开启了 rpc 选项, 可使用 http 协议代理方式调式 rpc 方法
+		DebugRpc(rw, r)
 		return
 	}
 
@@ -401,9 +381,9 @@ func (h *httpHandler) serveFile(rw http.ResponseWriter, r *http.Request) {
 			filesys = http.FS(embedStatic)
 		}
 	} else {
-		filesys = http.Dir(h.staticRoot)
+		filesys = http.Dir(ConfStaticRoot)
 	}
-	http.StripPrefix(h.staticPath, http.FileServer(filesys)).ServeHTTP(rw, r)
+	http.StripPrefix(ConfStaticPath, http.FileServer(filesys)).ServeHTTP(rw, r)
 } // }}}
 
 // pprof监控

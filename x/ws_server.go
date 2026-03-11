@@ -51,13 +51,8 @@ func SetWsHandler(p string, h func(net.Conn)) { // {{{
 	defaultWsHandler = h
 } // }}}
 
-func NewWsServer(addr string, port, rtimeout, wtimeout int, useGraceful bool) *WsServer {
+func NewWsServer() *WsServer {
 	server := &WsServer{
-		addr:           addr,
-		port:           port,
-		readTimeout:    rtimeout,
-		writeTimeout:   wtimeout,
-		useGraceful:    useGraceful,
 		maxHeaderBytes: defaultWsMaxHeaderBytes,
 		path:           defaultWsPath,
 		handler:        defaultWsHandler,
@@ -68,11 +63,6 @@ func NewWsServer(addr string, port, rtimeout, wtimeout int, useGraceful bool) *W
 
 // WebsocketServer
 type WsServer struct {
-	addr           string
-	port           int
-	readTimeout    int //毫秒
-	writeTimeout   int //毫秒
-	useGraceful    bool
 	maxHeaderBytes int
 	path           string
 	handler        func(net.Conn)
@@ -83,7 +73,7 @@ func (w *WsServer) Run() { // {{{
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", w.addr, w.port)
+	addr := fmt.Sprintf("%s:%d", Conf.GetString("ws_server", "addr"), Conf.GetInt("ws_server", "port"))
 
 	log.Println("WebsocketServer Listen", addr)
 
@@ -92,10 +82,10 @@ func (w *WsServer) Run() { // {{{
 		w.process(conn)
 	}))
 
-	rtimeout := time.Duration(w.readTimeout) * time.Millisecond
-	wtimeout := time.Duration(w.writeTimeout) * time.Millisecond
+	rtimeout := time.Duration(Conf.GetInt("ws_server", "read_timeout")) * time.Millisecond
+	wtimeout := time.Duration(Conf.GetInt("ws_server", "write_timeout")) * time.Millisecond
 
-	if w.useGraceful {
+	if Conf.GetDefBool(true, "ws_server", "use_graceful") {
 		log.Println(endless.ListenAndServe(addr, mux, rtimeout, wtimeout, w.maxHeaderBytes))
 	} else {
 		httpServer := &http.Server{

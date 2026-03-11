@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/nyxless/nyx/middleware"
+	"github.com/nyxless/nyx/tools"
 	"github.com/nyxless/nyx/x"
 	"github.com/nyxless/nyx/x/cache"
 	"github.com/nyxless/nyx/x/log"
@@ -290,6 +291,20 @@ func (n *Nyx) cacheConf() { // {{{
 	x.ConfTemplateRoot = x.Conf.GetDefString("../templates", "http_server", "template", "root")
 	x.ConfTemplateRecursionLimit = x.Conf.GetDefInt(3, "http_server", "template", "recursion_limit")
 	x.ConfMaxPostSize = int64(x.Conf.GetDefInt(32, "http_server", "max_post_size") << 20)
+	x.ConfPprofEnabled = x.Conf.GetDefBool(false, "http_server", "pprof_enabled")
+	x.ConfStaticEnabled = x.Conf.GetDefBool(false, "http_server", "static_files", "enabled")
+	x.ConfStaticPath = "/" + strings.Trim(x.Conf.GetDefString("static", "http_server", "static_files", "path"), "/")
+
+	static_root := x.Conf.GetDefString("../www", "http_server", "static_files", "root")
+	if static_root != "" && !filepath.IsAbs(static_root) {
+		static_root = filepath.Join(x.AppRoot, static_root)
+	}
+	x.ConfStaticRoot = static_root
+
+	x.ConfDebugRpcEnabled = x.Conf.GetDefBool(false, "http_server", "debug_rpc", "enabled")
+	x.ConfDebugRpcAppid = x.Conf.GetDefString("test", "http_server", "debug_rpc", "apid")
+	x.ConfDebugRpcSecret = x.Conf.GetDefString("test", "http_server", "debug_rpc", "secret")
+	x.ConfDebugRpcTimeout = x.Conf.GetDefInt(60, "http_server", "debug_rpc", "timeout")
 	x.ConfHttpLogOmitParams = x.Conf.GetStringSlice("http_log", "omit_params")
 	x.ConfRpcLogOmitParams = x.Conf.GetStringSlice("rpc_log", "omit_params")
 	x.ConfDefaultController = strings.ToLower(x.Conf.GetDefString("index", "default_controller"))
@@ -297,6 +312,10 @@ func (n *Nyx) cacheConf() { // {{{
 
 	n.parseRouter()
 	n.parseErrMsg()
+
+	if x.ConfDebugRpcEnabled {
+		x.DebugRpc = tools.DebugRpc
+	}
 } // }}}
 
 // 解析转换url路由配置
@@ -631,17 +650,7 @@ func (n *Nyx) run(modes ...string) { // {{{
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				x.NewHttpServer(
-					x.Conf.GetString("http_sever", "addr"),
-					x.Conf.GetDefInt(80, "http_server", "port"),
-					x.Conf.GetDefInt(60000, "http_server", "read_timeout"),
-					x.Conf.GetDefInt(60000, "http_server", "write_timeout"),
-					x.Conf.GetDefBool(true, "http_server", "use_graceful"),
-					x.Conf.GetBool("http_server", "pprof_enable"),
-					x.Conf.GetBool("http_server", "static_files", "enabled"),
-					x.Conf.GetDefString("static", "http_server", "static_files", "path"),
-					x.Conf.GetDefString("../www", "http_server", "static_files", "root"),
-				).Run()
+				x.NewHttpServer().Run()
 			}()
 
 		case "rpc":
@@ -652,11 +661,10 @@ func (n *Nyx) run(modes ...string) { // {{{
 			go func() {
 				defer wg.Done()
 
-				p := x.Conf.GetInt("rpc_server", "port")
-				if p <= 0 {
+				if x.Conf.GetInt("rpc_server", "port") <= 0 {
 					panic("请先指定 rpc  服务端口号!")
 				}
-				x.NewRpcServer(x.Conf.GetString("rpc_server", "addr"), p, x.Conf.GetInt("rpc_server", "timeout"), x.Conf.GetDefBool(true, "rpc_server", "use_graceful")).Run()
+				x.NewRpcServer().Run()
 			}()
 
 		case "tcp":
@@ -665,11 +673,10 @@ func (n *Nyx) run(modes ...string) { // {{{
 			go func() {
 				defer wg.Done()
 
-				p := x.Conf.GetInt("tcp_server", "port")
-				if p <= 0 {
+				if x.Conf.GetInt("tcp_server", "port") <= 0 {
 					panic("请先指定 tcp  服务端口号!")
 				}
-				x.NewTcpServer(x.Conf.GetString("tcp_server", "addr"), p, x.Conf.GetDefBool(true, "tcp_server", "use_graceful")).Run()
+				x.NewTcpServer().Run()
 			}()
 
 		case "ws":
@@ -678,11 +685,10 @@ func (n *Nyx) run(modes ...string) { // {{{
 			go func() {
 				defer wg.Done()
 
-				p := x.Conf.GetInt("ws_server", "port")
-				if p <= 0 {
+				if x.Conf.GetInt("ws_server", "port") <= 0 {
 					panic("请先指定 ws  服务端口号!")
 				}
-				x.NewWsServer(x.Conf.GetString("ws_server", "addr"), p, x.Conf.GetInt("ws_server", "read_timeout"), x.Conf.GetInt("ws_server", "write_timeout"), x.Conf.GetDefBool(true, "ws_server", "use_graceful")).Run()
+				x.NewWsServer().Run()
 			}()
 
 		case "cli":

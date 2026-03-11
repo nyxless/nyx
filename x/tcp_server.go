@@ -34,22 +34,16 @@ func SetTcpHandler(h func(net.Conn)) { // {{{
 	defaultTcpHandler = h
 } // }}}
 
-func NewTcpServer(addr string, port int, useGraceful bool) *TcpServer {
+func NewTcpServer() *TcpServer {
 	server := &TcpServer{
-		addr:        addr,
-		port:        port,
-		useGraceful: useGraceful,
-		handler:     defaultTcpHandler,
+		handler: defaultTcpHandler,
 	}
 
 	return server
 }
 
 type TcpServer struct {
-	addr        string
-	port        int
-	useGraceful bool
-	handler     func(net.Conn)
+	handler func(net.Conn)
 }
 
 func (t *TcpServer) SetTcpHandler(h func(net.Conn)) {
@@ -61,11 +55,11 @@ func (t *TcpServer) Run() { // {{{
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", t.addr, t.port)
+	addr := fmt.Sprintf("%s:%d", Conf.GetString("tcp_server", "addr"), Conf.GetInt("tcp_server", "port"))
 
 	log.Println("TcpServer Listen", addr)
 
-	if t.useGraceful {
+	if Conf.GetDefBool(true, "tcp_server", "use_graceful") {
 		log.Println(endless.ListenAndServeTcp(addr, "tcp4", t))
 	} else {
 		listener, err := t.listenTCP(addr)

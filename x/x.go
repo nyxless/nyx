@@ -4,6 +4,7 @@ import (
 	"github.com/nyxless/nyx/x/cache"
 	"github.com/nyxless/nyx/x/db"
 	"github.com/nyxless/nyx/x/log"
+	"net/http"
 )
 
 // 应用程序根路径
@@ -30,6 +31,8 @@ var DB *DBProxy
 // 全局共用redis代理
 var Redis *RedisProxy
 
+var DebugRpc DebugRpcFunc
+
 // 配置文件变量缓存(框架中使用)，初始化时赋值
 var (
 	ConfEnvMode                string
@@ -39,6 +42,14 @@ var (
 	ConfTemplateRoot           string
 	ConfTemplateRecursionLimit int
 	ConfMaxPostSize            int64
+	ConfPprofEnabled           bool
+	ConfStaticEnabled          bool
+	ConfStaticPath             string
+	ConfStaticRoot             string
+	ConfDebugRpcEnabled        bool
+	ConfDebugRpcAppid          string
+	ConfDebugRpcSecret         string
+	ConfDebugRpcTimeout        int
 	ConfHttpLogOmitParams      []string
 	ConfRpcLogOmitParams       []string
 	ConfDefaultController      string
@@ -106,6 +117,8 @@ type AMAP = map[any]any
 type Mapper interface {
 	Map() map[string]any
 }
+
+type DebugRpcFunc func(rw http.ResponseWriter, r *http.Request)
 
 type ResponseData struct {
 	Code    int32  `json:"code"`

@@ -53,17 +53,10 @@ func AddGrpcServerOption(o ...grpc.ServerOption) { // {{{
 	defaultGrpcServerOptions = append(defaultGrpcServerOptions, o...)
 } // }}}
 
-func NewRpcServer(addr string, port, timeout int, useGraceful bool) *RpcServer { // {{{
-	if timeout <= 0 {
-		timeout = 3000
-	}
-
-	AddGrpcServerOption(grpc.ConnectionTimeout(time.Duration(timeout) * time.Millisecond))
+func NewRpcServer() *RpcServer { // {{{
+	AddGrpcServerOption(grpc.ConnectionTimeout(time.Duration(Conf.GetDefInt(3000, "rpc_server", "timeout")) * time.Millisecond))
 
 	server := &RpcServer{
-		addr:        addr,
-		port:        port,
-		useGraceful: useGraceful,
 		handler: &grpcHandler{
 			routeMap:      make(map[string]map[string]reflect.Type),
 			methodMap:     make(map[string]map[string]int),
@@ -81,16 +74,12 @@ func NewRpcServer(addr string, port, timeout int, useGraceful bool) *RpcServer {
 } // }}}
 
 type RpcServer struct {
-	addr        string
-	port        int
-	useGraceful bool
-	handler     *grpcHandler
+	handler *grpcHandler
 }
 
 func (rs *RpcServer) Run() { // {{{
 	if len(rs.handler.routeMap) == 0 {
 		Warn("rpc controller not found, pls add controller using func `AddRpc` or shell `nyx init`")
-
 		return
 	}
 
@@ -98,14 +87,14 @@ func (rs *RpcServer) Run() { // {{{
 	rpcServer := grpc.NewServer(defaultGrpcServerOptions...)
 	pb.RegisterNYXRpcServer(rpcServer, rs.handler)
 
-	addr := fmt.Sprintf("%s:%d", rs.addr, rs.port)
+	addr := fmt.Sprintf("%s:%d", Conf.GetString("rpc_server", "addr"), Conf.GetInt("rpc_server", "port"))
 	Info("RpcServer Listen: ", addr)
 
-	if rs.useGraceful {
+	if Conf.GetDefBool(true, "rpc_server", "use_graceful") {
 		Info("Use graceful: ", "open")
 		Warn(endless.ListenAndServeTcp(addr, "", rpcServer))
 	} else {
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", rs.port))
+		lis, err := net.Listen("tcp", addr)
 
 		if err != nil {
 			Warn(err)
@@ -239,8 +228,9 @@ func (g *grpcHandler) defaultHandler(ctx context.Context, params map[string]any,
 			in = make([]reflect.Value, 0)
 			method = vc.Method(g.methodMap[controller_name]["GetResponseData"])
 			ret := method.Call(in)
-			res, _ = ret[0].Interface().(*ResponseData) //res = ret[0].Bytes()
-			err, _ = ret[1].Interface().(error)
+			newctx, _ = ret[0].Interface().(context.Context)
+			res, _ = ret[1].Interface().(*ResponseData) //res = ret[0].Bytes()
+			err, _ = ret[2].Interface().(error)
 		}
 
 		in = make([]reflect.Value, 0)
@@ -275,8 +265,9 @@ func (g *grpcHandler) defaultHandler(ctx context.Context, params map[string]any,
 	in = make([]reflect.Value, 0)
 	method = vc.Method(g.methodMap[controller_name]["GetResponseData"])
 	ret := method.Call(in)
-	res, _ = ret[0].Interface().(*ResponseData)
-	err, _ = ret[1].Interface().(error)
+	newctx, _ = ret[0].Interface().(context.Context)
+	res, _ = ret[1].Interface().(*ResponseData)
+	err, _ = ret[2].Interface().(error)
 
 	return
 } // }}}
