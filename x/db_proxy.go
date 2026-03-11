@@ -173,8 +173,3 @@ func (d *DBProxy) Close() { // {{{
 	}
 	d.c = make(map[string]db.DBClient)
 } // }}}
-
-// 拼装参数时，作为可执行字符，而不是字符串值
-func Expr(param string) string { // {{{
-	return db.Expr(param)
-} // }}}

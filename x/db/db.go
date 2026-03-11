@@ -272,22 +272,3 @@ func WithBytes(b bool) FnSqlOption { // {{{
 		s.useBytes = b
 	}
 } // }}}
-
-func Expr(param string) string { // {{{
-	if "" != param {
-		return "#~#" + param
-	}
-
-	return ""
-} // }}}
-
-// 表达式参数
-func GetExprParam(param any) string { // {{{
-	if val, ok := param.(string); ok {
-		if strings.HasPrefix(val, "#~#") {
-			return string([]byte(val)[3:])
-		}
-	}
-
-	return ""
-} // }}}

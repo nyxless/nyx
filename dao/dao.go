@@ -77,6 +77,25 @@ func (j *JoinOn) on(compare, left_field string, right_fields ...string) *JoinOn 
 	return j
 } // }}}
 
+// 逻辑条件组合
+type Cond struct {
+	op    string // "AND", "OR", "NOT"
+	conds []any  // 只接受 *Cond 和 map[string]any
+}
+
+// 逻辑组合函数
+func And(conds ...any) *Cond {
+	return &Cond{op: "AND", conds: conds}
+}
+
+func Or(conds ...any) *Cond {
+	return &Cond{op: "OR", conds: conds}
+}
+
+func Not(cond any) *Cond {
+	return &Cond{op: "NOT", conds: []any{cond}}
+}
+
 func (d *Dao) Init(conf_name ...string) { //{{{
 	master_conf_name := "db_master"
 	slave_conf_name := "db_slave"
@@ -374,6 +393,11 @@ func (d *Dao) InnerJoin(inner_join ...*JoinOn) *Dao { // {{{
 	return d
 } // }}}
 
+// alias for InnerJoin
+func (d *Dao) Join(inner_join ...*JoinOn) *Dao { // {{{
+	return d.InnerJoin(inner_join...)
+} // }}}
+
 func (d *Dao) On(left_field string, right_fields ...string) *JoinOn { // {{{
 	return d.on("=", left_field, right_fields...)
 } // }}}
@@ -406,55 +430,208 @@ func (d *Dao) GetDBReader() db.DBClient { // {{{
 	return d.DBReader
 } // }}}
 
-// 解析where条件
+// 解析查询参数，返回WHERE子句和参数值列表
 // 例1:parseParams("x=? and y=?", 1, 2)
 // 例2:parseParams("x=? and y=?", []any{1,2}) 等价于 parseParams("a=? and b=?", 1, 2) //若第二个参数非[]any(如[]int、[]string), 可先使用 AsSlice 进行转换
 // 例3:parseParams(map[string]any{"a":1,"b":2}) 等价于 parseParams("a=? and b=?", 1, 2)
 // 例4:parseParams(map[string]any{"a":1,"b":[]any{2, 3}}) 等价于 parseParams("a=? and b in ('2','3')", 1)
-func (d *Dao) parseParams(params ...any) (string, []any) { //{{{
-	where := ""
-	values := []any{}
+func (d *Dao) parseParams(params ...any) (string, []any) { // {{{
+	if len(params) == 0 || params[0] == nil {
+		return "", nil
+	}
 
-	l := len(params)
-	if l > 0 {
-		switch val := params[0].(type) {
-		case string:
-			where = val
-			values = params[1:]
-			if l == 2 {
-				if slice_val, ok := params[1].([]any); ok {
-					values = slice_val
-				}
-			}
+	// 第一个参数是 string 且包含 ?，作为 SQL 模板
+	if sql, ok := params[0].(string); ok && strings.Contains(sql, "?") {
+		if len(params) == 1 {
+			return sql, nil
+		}
+
+		// 若第二个参数是[]any，使用它作为值列表
+		if slice, ok := params[1].([]any); ok && len(params) == 2 {
+			return sql, slice
+		}
+		return sql, params[1:]
+	}
+
+	// 多参数模式，每个参数都是一个条件，用 AND 连接
+	var allParts []string
+	var allVals []any
+
+	for _, p := range params {
+		var part string
+		var vals []any
+
+		switch v := p.(type) {
+		case *Cond:
+			part, vals = parseCond(v)
 		case map[string]any:
-			for k, v := range val {
-				if where != "" {
-					where = where + " and "
-				}
-
-				if slice_val, ok := v.([]any); ok {
-					where = where + "`" + k + "` in ("
-
-					for i, j := range slice_val {
-						if i > 0 {
-							where = where + ","
-						}
-						where = where + "'" + strings.ReplaceAll(x.AsString(j), `'`, `\'`) + "'"
-					}
-					where = where + ")"
-				} else {
-					where = where + "`" + k + "`=?"
-					values = append(values, v)
-				}
-			}
+			part, vals = parseMap(v)
+		case string:
+			part = v
+			vals = nil
 		default:
-			where = x.AsString(params[0])
-			values = params[1:]
+			// 其他类型转为字符串条件
+			part = fmt.Sprint(v)
+			vals = nil
+		}
+
+		if part != "" {
+			allParts = append(allParts, part)
+			allVals = append(allVals, vals...)
 		}
 	}
 
-	return where, values
-} //}}}
+	if len(allParts) == 0 {
+		return "", nil
+	}
+
+	return strings.Join(allParts, " AND "), allVals
+} // }}}
+
+// 解析逻辑组合
+func parseCond(c *Cond) (string, []any) { // {{{
+	if len(c.conds) == 0 {
+		return "", nil
+	}
+
+	var parts []string
+	var vals []any
+
+	for _, child := range c.conds {
+		var sql string
+		var val []any
+
+		switch ch := child.(type) {
+		case *Cond:
+			sql, val = parseCond(ch)
+		case map[string]any:
+			sql, val = parseMap(ch)
+		default:
+			continue
+		}
+
+		if sql != "" {
+			parts = append(parts, sql)
+			vals = append(vals, val...)
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", nil
+	}
+
+	switch c.op {
+	case "NOT":
+		return "NOT (" + parts[0] + ")", vals
+	case "AND", "OR":
+		return "(" + strings.Join(parts, " "+c.op+" ") + ")", vals
+	default:
+		return parts[0], vals
+	}
+} // }}}
+
+// 解析 map 条件（支持后缀运算符）
+func parseMap(m map[string]any) (string, []any) { // {{{
+	if len(m) == 0 {
+		return "", nil
+	}
+
+	var parts []string
+	var vals []any
+
+	for key, val := range m {
+		// 解析后缀运算符 (field:op)
+		if idx := strings.LastIndex(key, ":"); idx > 0 {
+			field := key[:idx]
+			op := key[idx+1:]
+
+			switch op {
+			case "gt":
+				parts = append(parts, fmt.Sprintf("`%s` > ?", field))
+				vals = append(vals, val)
+			case "gte":
+				parts = append(parts, fmt.Sprintf("`%s` >= ?", field))
+				vals = append(vals, val)
+			case "lt":
+				parts = append(parts, fmt.Sprintf("`%s` < ?", field))
+				vals = append(vals, val)
+			case "lte":
+				parts = append(parts, fmt.Sprintf("`%s` <= ?", field))
+				vals = append(vals, val)
+			case "ne":
+				parts = append(parts, fmt.Sprintf("`%s` != ?", field))
+				vals = append(vals, val)
+			case "like":
+				parts = append(parts, fmt.Sprintf("`%s` LIKE ?", field))
+				vals = append(vals, val)
+			case "notlike":
+				parts = append(parts, fmt.Sprintf("`%s` NOT LIKE ?", field))
+				vals = append(vals, val)
+			case "in":
+				sql, vs := buildIn(field, "IN", val)
+				parts = append(parts, sql)
+				vals = append(vals, vs...)
+			case "notin":
+				sql, vs := buildIn(field, "NOT IN", val)
+				parts = append(parts, sql)
+				vals = append(vals, vs...)
+			case "btw":
+				sql, vs := buildBetween(field, val)
+				parts = append(parts, sql)
+				vals = append(vals, vs...)
+			case "null":
+				parts = append(parts, fmt.Sprintf("`%s` IS NULL", field))
+			case "notnull":
+				parts = append(parts, fmt.Sprintf("`%s` IS NOT NULL", field))
+			case "expr":
+				parts = append(parts, fmt.Sprintf("`%s` = %v", field, val))
+			default:
+				// 默认等于
+				parts = append(parts, fmt.Sprintf("`%s` = ?", field))
+				vals = append(vals, val)
+			}
+		} else {
+			// 无运算符，默认等于
+			parts = append(parts, fmt.Sprintf("`%s` = ?", key))
+			vals = append(vals, val)
+		}
+	}
+
+	return strings.Join(parts, " AND "), vals
+} // }}}
+
+// 构建 IN 条件
+func buildIn(field, op string, val any) (string, []any) { // {{{
+	v := x.AsSlice(val)
+
+	if len(v) == 0 {
+		if op == "IN" {
+			return "1=0", nil
+		}
+		return "1=1", nil
+	}
+
+	places := make([]string, len(v))
+	for i := 0; i < len(v); i++ {
+		places[i] = "?"
+	}
+
+	return fmt.Sprintf("`%s` %s (%s)", field, op, strings.Join(places, ",")), v
+} // }}}
+
+// buildBetween 构建 BETWEEN 条件
+func buildBetween(field string, val any) (string, []any) { // {{{
+	v := x.AsSlice(val)
+	if len(v) != 2 {
+		return "1=0", nil
+	}
+
+	return fmt.Sprintf("`%s` BETWEEN ? AND ?", field), v
+} // }}}
+
+func (d *Dao) Where(params ...any) *Dao { //{{{
+	return d.SetFilter(params...)
+} // }}}
 
 func (d *Dao) SetFilter(params ...any) *Dao { //{{{
 	where, values := d.parseParams(params...)
@@ -803,6 +980,68 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 	}
 
 	return res.(map[any]any), err
+} // }}}
+
+func (d *Dao) GetGroupMap(keyfield string, params ...any) (map[any]map[string]any, error) { //{{{
+	d.SetFilter(params...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(d.table),
+		db.WithFields(d.GetFields()),
+		db.WithIdx(d.getIndex()),
+		db.WithGroup(d.getGroup()),
+		db.WithOrder(d.getOrder("", false)),
+		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		list, err := d.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, x.ArrayGroupMap(list, keyfield), nil
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(map[any]map[string]any), err
+} // }}}
+
+func (d *Dao) GetGroupMaps(keyfield string, params ...any) (map[any][]map[string]any, error) { //{{{
+	d.SetFilter(params...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(d.table),
+		db.WithFields(d.GetFields()),
+		db.WithIdx(d.getIndex()),
+		db.WithGroup(d.getGroup()),
+		db.WithOrder(d.getOrder("", false)),
+		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		list, err := d.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, x.ArrayGroupMaps(list, keyfield), nil
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(map[any][]map[string]any), err
 } // }}}
 
 func (d *Dao) GetCount(params ...any) (int, error) { //{{{

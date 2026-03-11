@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 )
@@ -129,8 +130,13 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 	}
 
 	// 获取所有列名（假设所有map的键相同，以第一个为准）
-	var columns []string
+	columns := make([]string, 0, len(vals[0]))
+
 	for col := range vals[0] {
+		col = strings.TrimSuffix(col, ":expr")
+		if slices.Contains(columns, col) {
+			return 0, fmt.Errorf("row 0 has repeated columns:%s", col)
+		}
 		columns = append(columns, col)
 	}
 
@@ -157,15 +163,15 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 		for j, col := range columns {
 			val, ok := row[col]
 			if !ok {
+				if val, ok = row[col+":expr"]; ok {
+					ph[j] = fmt.Sprintf("%v", val)
+					continue
+				}
 				return 0, fmt.Errorf("row %d missing column %s", i, col)
 			}
 
-			if fval := GetExprParam(val); fval != "" {
-				ph[j] = fval
-			} else {
-				ph[j] = "?"
-				args = append(args, val)
-			}
+			ph[j] = "?"
+			args = append(args, val)
 		}
 		placeholders = append(placeholders, "("+strings.Join(ph, ", ")+")")
 	}
@@ -197,16 +203,24 @@ func (s *SqlClient) Update(table string, vals map[string]interface{}, where stri
 	buf.WriteString(" set ")
 
 	var value []interface{}
+	var isExpr bool
 	i := 0
 	for col, val := range vals {
 		if i > 0 {
 			buf.WriteString(",")
 		}
+
+		col, isExpr = strings.CutSuffix(col, ":expr")
+
 		buf.WriteString(col)
 		buf.WriteString("=")
 
-		if fval := GetExprParam(val); fval != "" {
-			buf.WriteString(fval)
+		if isExpr {
+			if _, ok := vals[col]; ok {
+				return 0, fmt.Errorf("exists repeated columns: %s", col)
+			}
+
+			buf.WriteString(fmt.Sprintf("%v", val))
 		} else {
 			buf.WriteString("?")
 			value = append(value, val)
@@ -243,12 +257,17 @@ func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...s
 	var placeholders []string
 	var args []interface{}
 	var updateParts []string
+	var isExpr bool
 
 	// 插入
 	for col, val := range vals {
+		col, isExpr = strings.CutSuffix(col, ":expr")
 		columns = append(columns, col)
-		if fval := GetExprParam(val); fval != "" {
-			placeholders = append(placeholders, fval)
+		if isExpr {
+			if _, ok := vals[col]; ok {
+				return 0, fmt.Errorf("exists repeated columns: %s", col)
+			}
+			placeholders = append(placeholders, fmt.Sprintf("%v", val))
 		} else {
 			placeholders = append(placeholders, "?")
 			args = append(args, val)
@@ -257,12 +276,13 @@ func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...s
 
 	// 更新（排除忽略字段）
 	for col, val := range vals {
+		col, isExpr = strings.CutSuffix(col, ":expr")
 		if contains(ignore_fields, col) {
 			continue
 		}
 
-		if fval := GetExprParam(val); fval != "" {
-			updateParts = append(updateParts, col+" = "+fval)
+		if isExpr {
+			updateParts = append(updateParts, fmt.Sprintf("`%s` = %v", col, val))
 		} else {
 			updateParts = append(updateParts, col+" = ?")
 			args = append(args, val)
