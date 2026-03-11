@@ -987,6 +987,37 @@ func asUint64(num any, typ RoundType, def ...uint64) uint64 { //{{{
 	return 0
 } // }}}
 
+// 数值 any 类型 转int64
+func NumToInt64(v any) (int64, bool) { // {{{
+	switch v := v.(type) {
+	case int:
+		return int64(v), true
+	case int8:
+		return int64(v), true
+	case int16:
+		return int64(v), true
+	case int32:
+		return int64(v), true
+	case int64:
+		return v, true
+	case uint:
+		return int64(v), true
+	case uint8:
+		return int64(v), true
+	case uint16:
+		return int64(v), true
+	case uint32:
+		return int64(v), true
+	case uint64:
+		return int64(v), true
+	case float32:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	}
+	return 0, false
+} // }}}
+
 // 字符串转数值
 //
 //go:inline

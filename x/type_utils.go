@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1373,15 +1374,33 @@ func ArrayColumnMap[T comparable](m []map[string]T, key, val string) map[T]T { /
 	return n
 } //}}}
 
-// 判断array/slice中是否存在某值
-func InArray[T comparable](search T, s []T) bool { // {{{
-	for _, v := range s {
-		if search == v {
-			return true
-		}
+// map 列表按指定字段，生成字段值索引的 map
+func ArrayGroupMap[T comparable](m []map[string]T, key string) map[T]map[string]T { // {{{
+	n := map[T]map[string]T{}
+	for _, i := range m {
+		n[i[key]] = i
 	}
 
-	return false
+	return n
+} //}}}
+
+// map 列表按指定字段，生成字段值索引的 map列表
+func ArrayGroupMaps[T comparable](m []map[string]T, key string) map[T][]map[string]T { // {{{
+	n := map[T][]map[string]T{}
+	for _, i := range m {
+		if n[i[key]] == nil {
+			n[i[key]] = []map[string]T{}
+		}
+		n[i[key]] = append(n[i[key]], i)
+	}
+
+	return n
+} //}}}
+
+// 判断array/slice中是否存在某值
+func InArray[S ~[]E, E comparable](s S, v E) bool { // {{{
+	// 封装标准包方法
+	return slices.Contains(s, v)
 } // }}}
 
 // 判断map中是否存在某值
@@ -1457,6 +1476,88 @@ func ArrayRem[T comparable](arr []T, n T) []T { // {{{
 	return narr
 } // }}}
 
+// 取 array 交集
+func ArrayIntersect[T any](a, b []T) []T { // {{{
+	if len(a) == 0 || len(b) == 0 {
+		return []T{}
+	}
+
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+
+	// []interface{} 特殊处理
+	if _, ok := any(a).([]interface{}); ok {
+		return any(intersectAny(any(a).([]interface{}), any(b).([]interface{}))).([]T)
+	}
+
+	// 可比较类型（包括数字、字符串、布尔等）
+	if reflect.TypeOf(a[0]).Comparable() {
+		return intersect(a, b)
+	}
+
+	fmt.Println(333)
+	// 不可比较类型用 DeepEqual
+	return intersectDeep(a, b) // 用 DeepEqual，O(n*m)
+} // }}}
+
+func intersect[T any](a, b []T) []T { // {{{
+	set := make(map[any]struct{}, len(a))
+	for _, v := range a {
+		set[v] = struct{}{}
+	}
+	res := make([]T, 0, len(a))
+	for _, v := range b {
+		if _, ok := set[v]; ok {
+			res = append(res, v)
+			delete(set, v)
+		}
+	}
+	return res
+} // }}}
+
+func intersectDeep[T any](a, b []T) []T { // {{{
+	res := make([]T, 0)
+	used := make([]bool, len(b))
+	for i := 0; i < len(a); i++ {
+		for j := 0; j < len(b); j++ {
+			if !used[j] && reflect.DeepEqual(a[i], b[j]) {
+				res = append(res, a[i])
+				used[j] = true
+				break
+			}
+		}
+	}
+	return res
+} // }}}
+
+func intersectAny(a, b []interface{}) []interface{} { // {{{
+	// 尝试数值
+	set := make(map[int64]bool, len(a))
+	allNum := true
+	for _, v := range a {
+		if n, ok := NumToInt64(v); ok {
+			set[n] = true
+		} else {
+			allNum = false
+			break
+		}
+	}
+
+	if allNum {
+		res := make([]interface{}, 0)
+		for _, v := range b {
+			if n, ok := NumToInt64(v); ok && set[n] {
+				res = append(res, v)
+				delete(set, n)
+			}
+		}
+		return res
+	}
+
+	return intersectDeep(a, b)
+} // }}}
+
 // 收集 map 的 key 到数组
 func MapKeys[K comparable, V any](m map[K]V) []K { // {{{
 	s := make([]K, 0, len(m))
@@ -1482,6 +1583,72 @@ func MapReverse[K comparable, V comparable](m map[K]V) map[V]K { // {{{
 		n[v] = k
 	}
 	return n
+} // }}}
+
+// 过滤 map, 保留指定的字段
+func FilterMap[K comparable, V any](data map[K]V, fields []K) map[K]V { // {{{
+	result := make(map[K]V)
+
+	if len(fields) == 0 {
+		return result
+	}
+
+	for _, field := range fields {
+		if value, exists := data[field]; exists {
+			result[field] = value
+		}
+	}
+
+	return result
+} // }}}
+
+// 过滤 map, 保留指定的字段, 多级处理
+func FilterMapDeep[K comparable, V any](data map[K]V, fields []K) map[K]V { // {{{
+	result := FilterMap(data, fields)
+
+	for k, v := range result {
+		if child, ok := any(v).(map[K]V); ok {
+			result[k] = any(FilterMapDeep(child, fields)).(V)
+		}
+	}
+
+	return result
+} // }}}
+
+// 过滤 map, 排除指定的字段
+func FilterMapExclude[K comparable, V any](data map[K]V, excludeFields []K) map[K]V { // {{{
+	if len(excludeFields) == 0 {
+		return data
+	}
+
+	result := make(map[K]V)
+
+	excludeMap := make(map[K]bool, len(excludeFields))
+	for _, field := range excludeFields {
+		excludeMap[field] = true
+	}
+
+	// 遍历原始 map，只复制不在排除列表中的字段
+	for key, value := range data {
+		if !excludeMap[key] {
+			result[key] = value
+		}
+	}
+
+	return result
+} // }}}
+
+// 过滤 map, 排除指定的字段, 多级处理
+func FilterMapExcludeDeep[K comparable, V any](data map[K]V, excludeFields []K) map[K]V { // {{{
+	result := FilterMapExclude(data, excludeFields)
+
+	for k, v := range result {
+		if child, ok := any(v).(map[K]V); ok {
+			result[k] = any(FilterMapExcludeDeep(child, excludeFields)).(V)
+		}
+	}
+
+	return result
 } // }}}
 
 //
