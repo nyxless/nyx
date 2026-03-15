@@ -1651,4 +1651,156 @@ func FilterMapExcludeDeep[K comparable, V any](data map[K]V, excludeFields []K) 
 	return result
 } // }}}
 
+// 支持升降序的多级排序
+type SortOption struct {
+	Field string
+	Desc  bool
+}
+
+// 使用 slices.SortFunc 实现多级排序, 需要 slice 中的 map 字段名及值类型一致
+func SortMapSlice(slice []MAP, opts ...SortOption) { // {{{
+	if len(slice) == 0 || len(opts) == 0 {
+		return
+	}
+
+	slices.SortFunc(slice, func(a, b MAP) int {
+		return compareMaps(a, b, opts)
+	})
+} // }}}
+
+func compareMaps(a, b MAP, opts []SortOption) int { // {{{
+	for _, opt := range opts {
+		valA := a[opt.Field]
+		valB := b[opt.Field]
+
+		if result := compareValues(valA, valB); result != 0 {
+			if opt.Desc {
+				return -result
+			}
+			return result
+		}
+	}
+
+	return 0 // 所有字段都相等
+} // }}}
+
+func compareValues(a, b any) int { // {{{
+	switch vA := a.(type) {
+	case int:
+		vB := b.(int)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case int8:
+		vB := b.(int8)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case int16:
+		vB := b.(int16)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case int32:
+		vB := b.(int32)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case int64:
+		vB := b.(int64)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case uint:
+		vB := b.(uint)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case uint8:
+		vB := b.(uint8)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case uint16:
+		vB := b.(uint16)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case uint32:
+		vB := b.(uint32)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case uint64:
+		vB := b.(uint64)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case float32:
+		vB := b.(float32)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case float64:
+		vB := b.(float64)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case string:
+		vB := b.(string)
+		if vA < vB {
+			return -1
+		} else if vA > vB {
+			return 1
+		}
+		return 0
+	case bool:
+		vB := b.(bool)
+		if !vA && vB {
+			return -1
+		} else if vA && !vB {
+			return 1
+		}
+		return 0
+	default:
+		return 0 // 不支持的类型视为相等
+	}
+} // }}}
+
 //
