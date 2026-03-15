@@ -83,13 +83,13 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 
 	sb.WriteString("SELECT ")
 
-	if so.fields == "" {
-		if so.alias != "" {
+	if so.alias != "" {
+		if so.fields == "*" {
 			sb.WriteString(so.alias)
 			sb.WriteString(".")
+		} else {
+			so.fields = FillAlias(so.alias, so.fields)
 		}
-
-		so.fields = "*"
 	}
 
 	sb.WriteString(so.fields)
@@ -135,6 +135,10 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 	}
 
 	if so.order != "" {
+		if so.alias != "" {
+			so.order = FillAlias(so.alias, so.order)
+		}
+
 		sb.WriteString(" ORDER BY ")
 		sb.WriteString(so.order)
 	}
@@ -271,4 +275,18 @@ func WithBytes(b bool) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.useBytes = b
 	}
+} // }}}
+
+func FillAlias(alias, sqlpart string) string { // {{{
+	fields := strings.Split(sqlpart, ",")
+	newFields := make([]string, 0, len(fields))
+	for i := range fields {
+		if strings.IndexAny(fields[i], ".(") > 0 {
+			newFields = append(newFields, fields[i])
+		} else {
+			newFields = append(newFields, alias+"."+strings.TrimSpace(fields[i]))
+		}
+	}
+
+	return strings.Join(newFields, ",")
 } // }}}

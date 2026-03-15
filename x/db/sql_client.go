@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"slices"
@@ -125,8 +124,8 @@ func (s *SqlClient) Commit() error { // {{{
 } // }}}
 
 func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { // {{{
-	if len(vals) == 0 {
-		return 0, nil
+	if len(vals) == 0 || len(vals[0]) == 0 {
+		return 0, fmt.Errorf("no record found")
 	}
 
 	// 获取所有列名（假设所有map的键相同，以第一个为准）
@@ -151,7 +150,7 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 
 	// 构建占位符和值
 	var placeholders []string
-	var args []interface{}
+	var args []any
 	for i, row := range vals {
 		// 检查每行的列是否一致
 		if len(row) != len(columns) {
@@ -196,13 +195,17 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 	return int(lastid), nil
 } // }}}
 
-func (s *SqlClient) Update(table string, vals map[string]interface{}, where string, val ...interface{}) (int, error) { // {{{
+func (s *SqlClient) Update(table string, vals map[string]any, where string, val ...any) (int, error) { // {{{
+	if len(vals) == 0 {
+		return 0, fmt.Errorf("no record found")
+	}
+
 	buf := bytes.NewBufferString("update ")
 
 	buf.WriteString(table)
 	buf.WriteString(" set ")
 
-	var value []interface{}
+	var value []any
 	var isExpr bool
 	i := 0
 	for col, val := range vals {
@@ -249,13 +252,13 @@ func (s *SqlClient) Update(table string, vals map[string]interface{}, where stri
 
 func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...string) (int, error) { // {{{
 	if len(vals) == 0 {
-		return 0, nil
+		return 0, fmt.Errorf("no record found")
 	}
 
 	// 获取列名和值
 	var columns []string
 	var placeholders []string
-	var args []interface{}
+	var args []any
 	var updateParts []string
 	var isExpr bool
 
@@ -360,7 +363,7 @@ func (s *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
 	return int(affect), nil
 } // }}}
 
-func (s *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, err error) { // {{{
+func (s *SqlClient) Exec(sqlstr string, val ...any) (result sql.Result, err error) { // {{{
 	var start_time time.Time
 	if s.Debug {
 		start_time = time.Now()
@@ -369,7 +372,7 @@ func (s *SqlClient) Exec(sqlstr string, val ...interface{}) (result sql.Result, 
 	result, err = s.executor.Exec(sqlstr, val...)
 
 	if s.Debug {
-		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.id})
+		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.id})
 	}
 
 	return result, errorHandle(err)
@@ -408,11 +411,7 @@ func (s *SqlClient) QueryOne(options ...FnSqlOption) (any, error) { // {{{
 	}
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		} else {
-			return nil, errorHandle(err)
-		}
+		return nil, errorHandle(err)
 	}
 
 	return parseValue(value, sqlOption.useBytes), nil
@@ -429,11 +428,11 @@ func (s *SqlClient) QueryRow(options ...FnSqlOption) (map[string]any, error) { /
 		return nil, errorHandle(err)
 	}
 
-	if len(list) > 0 {
-		return list[0], nil
+	if len(list) == 0 {
+		return nil, errorHandle(sql.ErrNoRows)
 	}
 
-	return make(map[string]any, 0), nil
+	return list[0], nil
 } // }}}
 
 func (s *SqlClient) Query(options ...FnSqlOption) ([]map[string]any, error) { //{{{
@@ -463,7 +462,7 @@ func (s *SqlClient) QueryStream(options ...FnSqlOption) (*RowIter, error) { //{{
 	rows, err := s.executor.Query(sqlstr, vals...)
 
 	if s.Debug {
-		log.Println(map[string]interface{}{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
+		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
 		s.explain(sqlstr, vals...)
 	}
 
@@ -485,7 +484,7 @@ func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 
 func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
 	if len(sqlstr) > 6 && bytes.EqualFold([]byte(sqlstr)[0:6], []byte("SELECT")) {
-		expl_results := []map[string]interface{}{}
+		expl_results := []map[string]any{}
 		sqlOptions := []FnSqlOption{
 			WithSql("explain "+sqlstr, val),
 		}
