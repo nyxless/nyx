@@ -1602,19 +1602,6 @@ func FilterMap[K comparable, V any](data map[K]V, fields []K) map[K]V { // {{{
 	return result
 } // }}}
 
-// 过滤 map, 保留指定的字段, 多级处理
-func FilterMapDeep[K comparable, V any](data map[K]V, fields []K) map[K]V { // {{{
-	result := FilterMap(data, fields)
-
-	for k, v := range result {
-		if child, ok := any(v).(map[K]V); ok {
-			result[k] = any(FilterMapDeep(child, fields)).(V)
-		}
-	}
-
-	return result
-} // }}}
-
 // 过滤 map, 排除指定的字段
 func FilterMapExclude[K comparable, V any](data map[K]V, excludeFields []K) map[K]V { // {{{
 	if len(excludeFields) == 0 {
@@ -1638,14 +1625,21 @@ func FilterMapExclude[K comparable, V any](data map[K]V, excludeFields []K) map[
 	return result
 } // }}}
 
-// 过滤 map, 排除指定的字段, 多级处理
-func FilterMapExcludeDeep[K comparable, V any](data map[K]V, excludeFields []K) map[K]V { // {{{
-	result := FilterMapExclude(data, excludeFields)
+// 过滤 []map, 保留指定的字段
+func FilterMapSlice[K comparable, V any](data []map[K]V, fields []K) []map[K]V { // {{{
+	result := make([]map[K]V, len(data))
+	for i := range data {
+		result[i] = FilterMap(data[i], fields)
+	}
 
-	for k, v := range result {
-		if child, ok := any(v).(map[K]V); ok {
-			result[k] = any(FilterMapExcludeDeep(child, excludeFields)).(V)
-		}
+	return result
+} // }}}
+
+// 过滤 []map, 排除指定的字段
+func FilterMapSliceExclude[K comparable, V any](data []map[K]V, excludeFields []K) []map[K]V { // {{{
+	result := make([]map[K]V, len(data))
+	for i := range data {
+		result[i] = FilterMapExclude(data[i], excludeFields)
 	}
 
 	return result

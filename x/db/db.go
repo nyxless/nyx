@@ -84,10 +84,7 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 	sb.WriteString("SELECT ")
 
 	if so.alias != "" {
-		if so.fields == "*" {
-			sb.WriteString(so.alias)
-			sb.WriteString(".")
-		} else {
+		if so.fields != "*" {
 			so.fields = FillAlias(so.alias, so.fields)
 		}
 	}
