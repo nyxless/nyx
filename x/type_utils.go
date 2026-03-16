@@ -1347,7 +1347,7 @@ func ArrayColumn[T comparable](m []map[string]T, column string) []T { // {{{
 	return n
 } //}}}
 
-func ArrayColumnUniq[T comparable](m []map[string]T, column string) []T { // {{{
+func ArrayColumnUnique[T comparable](m []map[string]T, column string) []T { // {{{
 	if len(m) == 0 {
 		return []T{}
 	}

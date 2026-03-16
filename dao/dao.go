@@ -951,6 +951,47 @@ func (d *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 	return res.([]any), err
 } // }}}
 
+func (d *Dao) GetUniqueValues(field string, params ...any) ([]any, error) { //{{{
+	d.SetFilter(params...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(d.table),
+		db.WithFields(field),
+		db.WithAlias(d.alias),
+		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
+		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithIdx(d.getIndex()),
+		db.WithGroup(d.getGroup()),
+		db.WithOrder(d.getOrder(false)),
+		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		list, err := d.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		if len(list) > 0 {
+			for k, _ := range list[0] {
+				field = k
+				break
+			}
+		}
+
+		return 0, x.ArrayColumnUnique(list, field), nil
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.([]any), err
+} // }}}
+
 func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]any, error) { //{{{
 	d.SetFilter(params...)
 
