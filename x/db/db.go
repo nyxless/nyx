@@ -128,7 +128,7 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 
 	if so.group != "" {
 		if so.alias != "" {
-			so.order = FillAlias(so.alias, so.group)
+			so.group = FillAlias(so.alias, so.group)
 		}
 
 		sb.WriteString(" GROUP BY ")
