@@ -24,6 +24,16 @@ type requestContainer interface { // {{{
 	GetInt32(key string, defaultValues ...int32) int32
 	// 获取Int64类型参数
 	GetInt64(key string, defaultValues ...int64) int64
+	// 获取Uint类型参数
+	GetUint(key string, defaultValues ...uint) uint
+	// 获取Uint8类型参数
+	GetUint8(key string, defaultValues ...uint8) uint8
+	// 获取Uint16类型参数
+	GetUint16(key string, defaultValues ...uint16) uint16
+	// 获取Uint32类型参数
+	GetUint32(key string, defaultValues ...uint32) uint32
+	// 获取Uint64类型参数
+	GetUint64(key string, defaultValues ...uint64) uint64
 	// 获取bool类型参数
 	GetBool(key string, defaultValues ...bool) bool
 	// 获取float类型参数

@@ -200,6 +200,106 @@ func (h *httpContainer) GetInt64(key string, defaultValues ...int64) int64 { // 
 	return 0
 } // }}}
 
+func (h *httpContainer) GetUint(key string, defaultValues ...uint) uint { // {{{
+	if h.JsonForm != nil {
+		if v, ok := h.JsonForm[key]; ok {
+			return x.AsUint(v, defaultValues...)
+		}
+	}
+
+	if v, ok := h.Form[key]; ok && len(v) > 0 {
+		if n, ok := x.ToUint(v[0]); ok {
+			return n
+		}
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
+	return 0
+} // }}}
+
+func (h *httpContainer) GetUint8(key string, defaultValues ...uint8) uint8 { // {{{
+	if h.JsonForm != nil {
+		if v, ok := h.JsonForm[key]; ok {
+			return x.AsUint8(v, defaultValues...)
+		}
+	}
+
+	if v, ok := h.Form[key]; ok && len(v) > 0 {
+		if n, ok := x.ToUint8(v[0]); ok {
+			return n
+		}
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
+	return 0
+} // }}}
+
+func (h *httpContainer) GetUint16(key string, defaultValues ...uint16) uint16 { // {{{
+	if h.JsonForm != nil {
+		if v, ok := h.JsonForm[key]; ok {
+			return x.AsUint16(v, defaultValues...)
+		}
+	}
+
+	if v, ok := h.Form[key]; ok && len(v) > 0 {
+		if n, ok := x.ToUint16(v[0]); ok {
+			return n
+		}
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
+	return 0
+} // }}}
+
+func (h *httpContainer) GetUint32(key string, defaultValues ...uint32) uint32 { // {{{
+	if h.JsonForm != nil {
+		if v, ok := h.JsonForm[key]; ok {
+			return x.AsUint32(v, defaultValues...)
+		}
+	}
+
+	if v, ok := h.Form[key]; ok && len(v) > 0 {
+		if n, ok := x.ToUint32(v[0]); ok {
+			return n
+		}
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
+	return 0
+} // }}}
+
+func (h *httpContainer) GetUint64(key string, defaultValues ...uint64) uint64 { // {{{
+	if h.JsonForm != nil {
+		if v, ok := h.JsonForm[key]; ok {
+			return x.AsUint64(v, defaultValues...)
+		}
+	}
+
+	if v, ok := h.Form[key]; ok && len(v) > 0 {
+		if n, ok := x.ToUint64(v[0]); ok {
+			return n
+		}
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
+	return 0
+} // }}}
+
 func (h *httpContainer) GetBool(key string, defaultValues ...bool) bool { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {

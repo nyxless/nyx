@@ -50,6 +50,26 @@ func (r *rpcContainer) GetInt64(key string, defaultValues ...int64) int64 { // {
 	return x.AsInt64(r.RpcForm[key], defaultValues...)
 } // }}}
 
+func (r *rpcContainer) GetUint(key string, defaultValues ...uint) uint { // {{{
+	return x.AsUint(r.RpcForm[key], defaultValues...)
+} // }}}
+
+func (r *rpcContainer) GetUint8(key string, defaultValues ...uint8) uint8 { // {{{
+	return x.AsUint8(r.RpcForm[key], defaultValues...)
+} // }}}
+
+func (r *rpcContainer) GetUint16(key string, defaultValues ...uint16) uint16 { // {{{
+	return x.AsUint16(r.RpcForm[key], defaultValues...)
+} // }}}
+
+func (r *rpcContainer) GetUint32(key string, defaultValues ...uint32) uint32 { // {{{
+	return x.AsUint32(r.RpcForm[key], defaultValues...)
+} // }}}
+
+func (r *rpcContainer) GetUint64(key string, defaultValues ...uint64) uint64 { // {{{
+	return x.AsUint64(r.RpcForm[key], defaultValues...)
+} // }}}
+
 func (r *rpcContainer) GetBool(key string, defaultValues ...bool) bool { // {{{
 	return x.AsBool(r.RpcForm[key], defaultValues...)
 } // }}}
