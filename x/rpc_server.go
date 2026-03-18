@@ -150,7 +150,7 @@ func (g *grpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stream)
 			}
 
 			res = &ResponseData{
-				Code: int32(ERR_SYSTEM.GetCode()),
+				Code: int32(ErrSystem.GetCode()),
 				Msg:  errmsg,
 			}
 
@@ -161,7 +161,7 @@ func (g *grpcHandler) Serve(ctx context.Context, req *pb.Request, stream Stream)
 	uri := strings.Trim(requesturi, " \r\t\v/")
 	idx := strings.LastIndex(uri, "/")
 
-	Interceptor(idx > 0, ERR_METHOD_INVALID, uri)
+	Interceptor(idx > 0, ErrMethodInvalid, uri)
 
 	uri = strings.ToLower(uri)
 
@@ -210,7 +210,7 @@ func (g *grpcHandler) defaultHandler(ctx context.Context, params map[string]any,
 		}
 	}
 
-	Interceptor(canhandler, ERR_METHOD_INVALID, controller_name+"/"+action_name)
+	Interceptor(canhandler, ErrMethodInvalid, controller_name+"/"+action_name)
 
 	//未预生成代码，使用反射
 	Info("Pre-generated code for " + controller_name + "/" + action_name + " was not found.  Reflection is used now OR U can gen code using shell `nyx init`")

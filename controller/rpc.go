@@ -23,7 +23,7 @@ func (r *RPC) Prepare(ctx context.Context, params x.MAP, controller, action, gro
 	r.SetGuid(guid)
 
 	// lang 用于错误信息按语言展示, 依次检查: 请求参数 -> header -> 配置文件 -> 默认
-	lang := r.GetString(x.ConfLangKey, r.GetHeader(x.ConfLangKey, x.DEFAULT_LANG))
+	lang := r.GetString(x.ConfLangKey, r.GetHeader(x.ConfLangKey, x.DefaultLang))
 	r.SetLang(lang)
 
 	r.SetHeader(x.ConfGuidKey, guid)

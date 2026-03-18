@@ -41,7 +41,7 @@ func (h *HTTP) Prepare(w http.ResponseWriter, r *http.Request, controller, actio
 	h.SetGuid(guid)
 
 	// lang 用于错误信息按语言展示, 依次检查: 请求参数 -> header -> 配置文件 -> 默认
-	lang := h.GetString(x.ConfLangKey, h.GetHeader(x.ConfLangKey, x.DEFAULT_LANG))
+	lang := h.GetString(x.ConfLangKey, h.GetHeader(x.ConfLangKey, x.DefaultLang))
 	h.SetLang(lang)
 
 	h.SetHeader(x.ConfGuidKey, guid)

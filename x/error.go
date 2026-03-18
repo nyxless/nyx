@@ -10,17 +10,18 @@ import (
 
 var (
 	//多语言时指定默认语言
-	DEFAULT_LANG = "CN"
+	DefaultLang = "CN"
 
 	//成功
-	ERR_SUC = NewErr(0, "OK")
+	ErrSuc = NewErr(0, "OK")
 
 	//系统错误码
-	ERR_OTHER          = NewErr(10, "%+v")
-	ERR_SYSTEM         = NewErr(11, "CN", "系统错误", "EN", "System error. Please try again later.")
-	ERR_METHOD_INVALID = NewErr(12, "CN", "请求不合法: %+v", "EN", "invalid request: %+v")
-	ERR_PARAMS         = NewErr(13, "CN", "参数错误: %+v", "EN", "invalid param: %+v")
-	ERR_AUTH           = NewErr(14, "CN", "认证失败", "EN", "request unauthorized")
+	ErrOther         = NewErr(10, "%+v")
+	ErrSystem        = NewErr(11, "CN", "系统错误", "EN", "System error. Please try again later.")
+	ErrMethodInvalid = NewErr(12, "CN", "请求不合法: %+v", "EN", "Invalid request: %+v")
+	ErrParams        = NewErr(13, "CN", "参数错误: %+v", "EN", "Invalid param: %+v")
+	ErrAuth          = NewErr(14, "CN", "认证失败", "EN", "Request unauthorized")
+	ErrNoRows        = NewErr(15, "CN", "数据不存在", "EN", "No record") //对应 sql.ErrNoRows = errors.New("sql: no rows in result set")
 
 	ErrMap   = map[int32]MAPS{}
 	ErrMapRo = map[int32]MAPS{} //只读MAP
@@ -33,16 +34,16 @@ func NewErr(code int32, msgs ...string) *Error { // {{{
 	i := 0
 	for i+1 < len(msgs) {
 		msgMap[strings.ToUpper(msgs[i])] = msgs[i+1]
-		//确保 DEFAULT_LANG 下有值
-		if _, ok := msgMap[DEFAULT_LANG]; !ok {
-			msgMap[DEFAULT_LANG] = msgs[i+1]
+		//确保 DefaultLang 下有值
+		if _, ok := msgMap[DefaultLang]; !ok {
+			msgMap[DefaultLang] = msgs[i+1]
 		}
 
 		i += 2
 	}
 
 	if len(msgMap) == 0 && len(msgs) > 0 {
-		msgMap[DEFAULT_LANG] = msgs[0]
+		msgMap[DefaultLang] = msgs[0]
 	}
 
 	mu.Lock()
@@ -77,7 +78,7 @@ func (e *Error) GetMessage(langs ...string) string { // {{{
 	if len(langs) > 0 {
 		lang = langs[0]
 	} else {
-		lang = DEFAULT_LANG
+		lang = DefaultLang
 	}
 
 	errMsgs, ok := ErrMapRo[e.code]
@@ -88,8 +89,8 @@ func (e *Error) GetMessage(langs ...string) string { // {{{
 	if !ok {
 		msg, ok = e.msg[lang]
 
-		if !ok && lang != DEFAULT_LANG {
-			msg = e.msg[DEFAULT_LANG]
+		if !ok && lang != DefaultLang {
+			msg = e.msg[DefaultLang]
 		}
 	}
 
@@ -123,7 +124,7 @@ func Interceptor(guard bool, errmsg any, fmts ...any) { // {{{
 			v.fmt = fmts
 			err = v
 		} else {
-			err = ERR_OTHER
+			err = ErrSystem
 			err.fmt = []any{errmsg}
 		}
 

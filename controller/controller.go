@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -68,7 +69,7 @@ func (c *Controller) GetErrorResponse(err any) (int32, string, x.MAP) { // {{{
 
 	switch errinfo := err.(type) {
 	case string:
-		errno = x.ERR_SYSTEM.GetCode()
+		errno = x.ErrSystem.GetCode()
 		errmsg = errinfo
 	case *x.Error:
 		errno = errinfo.GetCode()
@@ -76,10 +77,10 @@ func (c *Controller) GetErrorResponse(err any) (int32, string, x.MAP) { // {{{
 		retdata = errinfo.GetData()
 		isbizerr = true
 	case error:
-		errno = x.ERR_SYSTEM.GetCode()
+		errno = x.ErrSystem.GetCode()
 		errmsg = errinfo.Error()
 	default:
-		errno = x.ERR_SYSTEM.GetCode()
+		errno = x.ErrSystem.GetCode()
 		errmsg = fmt.Sprint(errinfo)
 	}
 
@@ -91,8 +92,9 @@ func (c *Controller) GetErrorResponse(err any) (int32, string, x.MAP) { // {{{
 		fmt.Println(errmsg)
 		os.Stderr.Write(debug_trace)
 
-		if x.ConfEnvMode != "dev" {
-			errmsg = x.ERR_SYSTEM.GetMessage(c.lang)
+		// 生产环境隐藏错误信息(可在错误日志中查看)
+		if strings.EqualFold(x.ConfEnvMode, "prod") {
+			errmsg = x.ErrSystem.GetMessage(c.lang)
 		}
 	}
 

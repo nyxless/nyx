@@ -41,7 +41,7 @@ func DebugRpc(rw http.ResponseWriter, r *http.Request) { // {{{
 	uri := strings.Trim(strings.TrimPrefix(path, "/debug/rpc/"), " \r\t\v/")
 
 	idx := strings.LastIndex(uri, "/")
-	x.Interceptor(idx > 0, x.ERR_METHOD_INVALID, uri)
+	x.Interceptor(idx > 0, x.ErrMethodInvalid, uri)
 
 	uri = strings.ToLower(uri)
 
@@ -67,7 +67,7 @@ func DebugRpc(rw http.ResponseWriter, r *http.Request) { // {{{
 	}
 	rpc_res, err := rpcRequest(r.Context(), controller_name, action_name, params, rpc_hds)
 	if err != nil {
-		c.RenderError(x.NewErr(x.ERR_OTHER.GetCode(), err.Error()))
+		c.RenderError(x.NewErr(x.ErrOther.GetCode(), err.Error()))
 	} else {
 		c.Render(rpc_res)
 	}

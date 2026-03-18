@@ -466,7 +466,7 @@ func (n *Nyx) parseRouter() { // {{{
 
 // 解析 err_msg
 func (n *Nyx) parseErrMsg() { // {{{
-	x.DEFAULT_LANG = x.Conf.GetDefString("CN", "default_lang")
+	x.DefaultLang = x.Conf.GetDefString("CN", "default_lang")
 
 	x.ErrMapRo = x.MapMerge(x.ErrMapRo, x.ErrMap)
 

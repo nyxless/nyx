@@ -750,7 +750,7 @@ func (h *httpContainer) Render(data ...any) { // {{{
 		retdata = make(x.MAP)
 	}
 
-	h.render(x.ERR_SUC.GetCode(), x.ERR_SUC.GetMessage(), retdata)
+	h.render(x.ErrSuc.GetCode(), x.ErrSuc.GetMessage(), retdata)
 } // }}}
 
 // 接口异常输出, json 格式

@@ -85,7 +85,7 @@ var (
 
 		c := &controller.HTTP{}
 		c.Prepare(w, r, controllerName, actionName, group)
-		c.RenderError(x.ERR_AUTH)
+		c.RenderError(x.ErrAuth)
 		c.Final()
 		return
 	} // }}}
@@ -97,7 +97,7 @@ var (
 
 		c := &controller.RPC{}
 		c.Prepare(ctx, params, controllerName, actionName, group, stream)
-		c.RenderError(x.ERR_AUTH)
+		c.RenderError(x.ErrAuth)
 		return c.GetResponseData()
 	} // }}}
 )

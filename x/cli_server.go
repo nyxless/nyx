@@ -79,7 +79,7 @@ func (c *CliServer) serveCli() {
 	uri := strings.Trim(c.uri, " \r\t\v/")
 	idx := strings.LastIndex(uri, "/")
 
-	Interceptor(idx > 0, ERR_METHOD_INVALID, c.uri)
+	Interceptor(idx > 0, ErrMethodInvalid, c.uri)
 
 	uri = strings.ToLower(uri)
 
@@ -101,7 +101,7 @@ func (c *CliServer) serveCli() {
 		}
 	}
 
-	Interceptor(canhandler, ERR_METHOD_INVALID, uri)
+	Interceptor(canhandler, ErrMethodInvalid, uri)
 
 	vc := reflect.New(controllerType)
 	var in []reflect.Value

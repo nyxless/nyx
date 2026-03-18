@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// GetOne、GetRecord、GetRecordBy 时无记录会返回 sql.ErrNoRows
-var ErrNoRows = sql.ErrNoRows
-
 type Dao struct {
 	DBWriter, DBReader   db.DBClient
 	table                string
@@ -488,7 +485,7 @@ func parseCond(c *Cond, alias string) (string, []any) { // {{{
 		}
 
 		if sql != "" {
-			parts = append(parts, sql)
+			parts = append(parts, "("+sql+")")
 			vals = append(vals, val...)
 		}
 	}
@@ -501,7 +498,7 @@ func parseCond(c *Cond, alias string) (string, []any) { // {{{
 	case "NOT":
 		return "NOT (" + parts[0] + ")", vals
 	case "AND", "OR":
-		return "(" + strings.Join(parts, " "+c.op+" ") + ")", vals
+		return strings.Join(parts, " "+c.op+" "), vals
 	default:
 		return parts[0], vals
 	}
@@ -788,6 +785,9 @@ func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 	}, sqlOptions)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, x.ErrNoRows
+		}
 		return nil, err
 	}
 
@@ -901,6 +901,10 @@ func (d *Dao) GetOne(field string, params ...any) (any, error) { //{{{
 		res, err := d.GetDBReader().GetOne(sqlOptions...)
 		return 0, res, err
 	}, sqlOptions)
+
+	if err == sql.ErrNoRows {
+		return nil, x.ErrNoRows
+	}
 
 	return res, err
 } // }}}
@@ -1171,6 +1175,9 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 	}, sqlOptions)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, x.ErrNoRows
+		}
 		return nil, err
 	}
 

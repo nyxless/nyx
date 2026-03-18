@@ -197,7 +197,7 @@ func (r *rpcContainer) Render(data ...any) { // {{{
 		retdata = make(x.MAP)
 	}
 
-	res := r.RenderResponser(x.ERR_SUC.GetCode(), x.ERR_SUC.GetMessage(), retdata)
+	res := r.RenderResponser(x.ErrSuc.GetCode(), x.ErrSuc.GetMessage(), retdata)
 	r.render(res)
 } // }}}
 
