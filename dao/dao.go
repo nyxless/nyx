@@ -881,7 +881,7 @@ func (d *Dao) DelRecords(params ...any) (int, error) { //{{{
 	return d.DBWriter.Delete(sqlOptions...)
 } // }}}
 
-func (d *Dao) GetOne(field string, params ...any) (any, error) { //{{{
+func (d *Dao) getOne(field string, params ...any) (any, error) { //{{{
 	d.SetFilter(params...)
 
 	sqlOptions := []db.FnSqlOption{
@@ -902,6 +902,11 @@ func (d *Dao) GetOne(field string, params ...any) (any, error) { //{{{
 		return 0, res, err
 	}, sqlOptions)
 
+	return res, err
+} // }}}
+
+func (d *Dao) GetOne(field string, params ...any) (any, error) { //{{{
+	res, err := d.getOne(field, params...)
 	if err == sql.ErrNoRows {
 		return nil, x.ErrNoRows
 	}
@@ -1123,6 +1128,9 @@ func (d *Dao) GetCount(params ...any) (int, error) { //{{{
 
 		count, err := d.GetDBReader().GetOne(sqlOptions...)
 		if err != nil {
+			if err == sql.ErrNoRows {
+				return 0, nil, nil
+			}
 			return 0, nil, err
 		}
 		return 0, count, nil
@@ -1133,17 +1141,18 @@ func (d *Dao) GetCount(params ...any) (int, error) { //{{{
 } // }}}
 
 func (d *Dao) Exists(id any) (bool, error) { //{{{
-	one, err := d.GetOne(d.primary, d.primary+"=?", id)
-	if err != nil {
-		return false, err
+	params := x.MAP{
+		d.primary: id,
 	}
-
-	return one != nil, nil
+	return d.ExistsBy(params)
 } // }}}
 
 func (d *Dao) ExistsBy(params ...any) (bool, error) { //{{{
-	one, err := d.GetOne(d.primary, params...)
+	one, err := d.getOne(d.primary, params...)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -1231,6 +1240,9 @@ func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 
 			count, err = db_reader.GetOne(db.WithTable(d.table), db.WithAlias(d.alias), db.WithLeftJoin(left_join), db.WithInnerJoin(inner_join), db.WithFields("count(1) as total"), db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values))
 			if err != nil {
+				if err == sql.ErrNoRows {
+					return 0, nil, nil
+				}
 				return 0, nil, err
 			}
 
