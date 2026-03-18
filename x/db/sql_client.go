@@ -280,7 +280,7 @@ func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...s
 	// 更新（排除忽略字段）
 	for col, val := range vals {
 		col, isExpr = strings.CutSuffix(col, ":expr")
-		if contains(ignore_fields, col) {
+		if slices.Contains(ignore_fields, col) {
 			continue
 		}
 
@@ -372,7 +372,7 @@ func (s *SqlClient) Exec(sqlstr string, val ...any) (result sql.Result, err erro
 	result, err = s.executor.Exec(sqlstr, val...)
 
 	if s.Debug {
-		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "val": val, "#ID": s.id})
+		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, val), "#ID": s.id})
 	}
 
 	return result, errorHandle(err)
@@ -406,7 +406,7 @@ func (s *SqlClient) QueryOne(options ...FnSqlOption) (any, error) { // {{{
 
 	err = s.executor.QueryRow(sqlstr, vals...).Scan(&value)
 	if s.Debug {
-		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
+		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, vals), "#ID": s.ID()})
 		s.explain(sqlstr, vals...)
 	}
 
@@ -462,7 +462,7 @@ func (s *SqlClient) QueryStream(options ...FnSqlOption) (*RowIter, error) { //{{
 	rows, err := s.executor.Query(sqlstr, vals...)
 
 	if s.Debug {
-		log.Println(map[string]any{"tx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": sqlstr, "vals": vals, "#ID": s.ID()})
+		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, vals), "#ID": s.ID()})
 		s.explain(sqlstr, vals...)
 	}
 
@@ -498,12 +498,27 @@ func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
 	}
 } // }}}
 
-// 检查字符串是否在切片中
-func contains(slice []string, item string) bool { // {{{
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
+func debugSql(query string, args []interface{}) string { // {{{
+	if len(args) == 0 {
+		return query
 	}
-	return false
+
+	for _, arg := range args {
+		query = strings.Replace(query, "?", formatArg(arg), 1)
+	}
+	return query
+} // }}}
+
+func formatArg(arg interface{}) string { // {{{
+	if arg == nil {
+		return "NULL"
+	}
+	switch v := arg.(type) {
+	case string:
+		return "'" + strings.ReplaceAll(v, "'", "''") + "'"
+	case []byte:
+		return "'" + strings.ReplaceAll(string(v), "'", "''") + "'"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 } // }}}
