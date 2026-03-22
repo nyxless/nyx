@@ -53,37 +53,42 @@ type Logger struct {
 	writers        map[io.Writer]struct{}            // 当使用 MultiWriter 时，保存所有 writer
 	writer_accepts map[io.Writer]map[string]struct{} // 当使用 MultiWriter 时， 不同writer接受的日志级别，未指定则全接受
 	encoder        Encoder                           //输出格式化
-	//buffer         *RingBuffer                  // 日志缓冲区
-	stopChan      chan struct{}  // 停止信号
-	wg            sync.WaitGroup // 等待日志写完
-	mu            sync.Mutex
-	timeFormat    string        // 时间格式
-	useQueue      bool          //是否使用异步队列
-	flushInterval time.Duration //自动刷新 bufio 时间间隔，避免buffed size过小时无法刷新的问题
-	prefix        string        //前缀
-	bulk          *Bulk
-	queue         chan *Bulk
-	queueSize     int
-	debug         bool
-	traceFile     bool // 是否打印文件名
-	showLevel     bool //是否显示级别名称
+	stopChan       chan struct{}                     // 停止信号
+	wg             sync.WaitGroup                    // 等待日志写完
+	mu             sync.Mutex
+	timeFormat     string        // 时间格式
+	useQueue       bool          //是否使用异步队列
+	flushInterval  time.Duration //自动刷新 bufio 时间间隔，避免buffed size过小时无法刷新的问题
+	prefix         string        //前缀
+	bulk           *Bulk
+	queue          chan *Bulk
+	queueSize      int
+	bulkSize       int
+	bulkPool       sync.Pool
+	debug          bool
+	traceFile      bool // 是否打印文件名
+	showLevel      bool //是否显示级别名称
 }
 
 var (
-	DefaultWriter        io.Writer     = os.Stdout
-	DefaultEncoder       Encoder       = &TextEncoder{}
-	DefaultLogLevel      LogLevel      = LevelAll
-	DefaultTimeFormat    string        = "" //空时使用时间戳
-	DefaultFlushInterval time.Duration = 3 * time.Second
-	DefaultQueueSize     int           = 1024
-	DefaultTraceDepth    int           = 1
-	DefaultPrefix        string        = ""
+	DefaultWriter     io.Writer = os.Stdout
+	DefaultEncoder    Encoder   = &TextEncoder{}
+	DefaultTraceDepth int       = 1
 )
+
+// 默认日志配置，可直接修改以影响后续 NewLogger 创建的实例
+var defaultOptions = &LogOptions{
+	QueueSize:  1024,
+	BulkSize:   32,
+	Level:      int(LevelAll),
+	Prefix:     "",
+	TimeFormat: "2006-01-02T15:04:05.000Z07:00", // 值为 `TIMESTAMP` 时使用时间戳
+}
 
 type LogOptions struct {
 	QueueSize     int
-	Level         int
 	BulkSize      int
+	Level         int
 	TraceFile     bool
 	ShowLevel     bool
 	UseQueue      bool
@@ -92,6 +97,58 @@ type LogOptions struct {
 	FileLevelRule map[string]*LogFileRule
 	Prefix        string
 	TimeFormat    string
+}
+
+func (o *LogOptions) clone() *LogOptions {
+	return &LogOptions{
+		QueueSize:     o.QueueSize,
+		BulkSize:      o.BulkSize,
+		Level:         o.Level,
+		TraceFile:     o.TraceFile,
+		ShowLevel:     o.ShowLevel,
+		UseQueue:      o.UseQueue,
+		FileEnabled:   o.FileEnabled,
+		FileRule:      o.FileRule,
+		FileLevelRule: o.FileLevelRule,
+		Prefix:        o.Prefix,
+		TimeFormat:    o.TimeFormat,
+	}
+}
+
+func (o *LogOptions) merge(from *LogOptions) {
+	if from.QueueSize > 0 {
+		o.QueueSize = from.QueueSize
+	}
+	if from.BulkSize > 0 {
+		o.BulkSize = from.BulkSize
+	}
+	if from.Level > 0 {
+		o.Level = from.Level
+	}
+	if from.TraceFile {
+		o.TraceFile = true
+	}
+	if from.ShowLevel {
+		o.ShowLevel = true
+	}
+	if from.UseQueue {
+		o.UseQueue = true
+	}
+	if from.FileEnabled {
+		o.FileEnabled = true
+	}
+	if from.FileRule != nil {
+		o.FileRule = from.FileRule
+	}
+	if from.FileLevelRule != nil {
+		o.FileLevelRule = from.FileLevelRule
+	}
+	if from.Prefix != "" {
+		o.Prefix = from.Prefix
+	}
+	if from.TimeFormat != "" {
+		o.TimeFormat = from.TimeFormat
+	}
 }
 
 type LogFileRule struct {
@@ -106,74 +163,44 @@ type LogFileRule struct {
 }
 
 func NewLogger(opts ...*LogOptions) (*Logger, error) { // {{{
-	use_queue := true
-	trace_file := false
-	show_level := false
-	file_enabled := false
-	var file_rule *LogFileRule
-	var file_level_rule map[string]*LogFileRule
-
+	opt := defaultOptions.clone()
 	if len(opts) > 0 {
-		opt := opts[0]
-
-		if opt.QueueSize > 0 {
-			DefaultQueueSize = opt.QueueSize
-		}
-
-		if opt.BulkSize > 0 {
-			DefaultBulkSize = opt.BulkSize
-		}
-
-		if opt.Level > 0 {
-			DefaultLogLevel = LogLevel(opt.Level)
-		}
-
-		if opt.TimeFormat != "" {
-			DefaultTimeFormat = opt.TimeFormat
-		}
-
-		if opt.Prefix != "" {
-			DefaultPrefix = opt.Prefix
-		}
-
-		trace_file = opt.TraceFile
-		show_level = opt.ShowLevel
-		use_queue = opt.UseQueue
-		file_rule = opt.FileRule
-		file_level_rule = opt.FileLevelRule
-		file_enabled = opt.FileEnabled
+		opt.merge(opts[0])
 	}
 
 	logger := &Logger{
-		level:          DefaultLogLevel,
+		level:          LogLevel(opt.Level),
 		writer:         DefaultWriter,
 		writers:        make(map[io.Writer]struct{}),
 		writer_accepts: make(map[io.Writer]map[string]struct{}),
 		encoder:        DefaultEncoder,
-		//buffer:         NewRingBuffer(ring_size),
-		timeFormat:    DefaultTimeFormat,
-		stopChan:      make(chan struct{}),
-		useQueue:      use_queue,
-		flushInterval: DefaultFlushInterval,
-		bulk:          GetBulk(),
-		queue:         make(chan *Bulk, DefaultQueueSize),
-		queueSize:     DefaultQueueSize,
-		traceFile:     trace_file,
-		showLevel:     show_level,
-		prefix:        DefaultPrefix,
+		timeFormat:     opt.TimeFormat,
+		stopChan:       make(chan struct{}),
+		useQueue:       opt.UseQueue,
+		flushInterval:  3 * time.Second,
+		queue:          make(chan *Bulk, opt.QueueSize),
+		queueSize:      opt.QueueSize,
+		bulkSize:       opt.BulkSize,
+		traceFile:      opt.TraceFile,
+		showLevel:      opt.ShowLevel,
+		prefix:         opt.Prefix,
 	}
-	//logger.SetWriter(DefaultWriter)
 
-	if file_enabled {
-		err := logger.UseFileWriter(file_rule, file_level_rule)
-		if err != nil {
+	logger.bulkPool = sync.Pool{
+		New: func() any {
+			return &Bulk{entrys: make([]*Entry, 0, opt.BulkSize)}
+		},
+	}
+	logger.bulk = logger.bulkPool.Get().(*Bulk)
+
+	if opt.FileEnabled {
+		if err := logger.UseFileWriter(opt.FileRule, opt.FileLevelRule); err != nil {
 			return nil, err
 		}
 	}
 
 	//后台处理日志
 	logger.wg.Add(1)
-
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -187,6 +214,29 @@ func NewLogger(opts ...*LogOptions) (*Logger, error) { // {{{
 	return logger, nil
 } // }}}
 
+// 从 LogFileRule 构建 FileWriter 选项
+func buildFileWriterOpts(rule *LogFileRule) []FuncOption {
+	opts := []FuncOption{
+		WithCompress(rule.Compress),
+		WithRemove(rule.Remove),
+	}
+
+	if rule.BufferSize > 0 {
+		opts = append(opts, WithBufferSize(rule.BufferSize))
+	}
+	if rule.FileSize > 0 {
+		opts = append(opts, WithFileSize(rule.FileSize))
+	}
+	if rule.Compress {
+		opts = append(opts, WithCompressBefore(rule.CompressBefore))
+	}
+	if rule.Remove {
+		opts = append(opts, WithRemoveBefore(rule.RemoveBefore))
+	}
+
+	return opts
+}
+
 func (l *Logger) UseFileWriter(file_rule *LogFileRule, file_level_rule map[string]*LogFileRule) error { // {{{
 	writers := map[string]io.Writer{}
 	writer_levels := map[io.Writer][]string{}
@@ -196,37 +246,14 @@ func (l *Logger) UseFileWriter(file_rule *LogFileRule, file_level_rule map[strin
 	for level_name, rule := range file_level_rule { // {{{
 		key := rule.Path + rule.NamingFormat
 		conf[level_name] = key
+
 		writer, ok := writers[key]
 		if !ok {
-			var writer_opts []FuncOption
-
-			if rule.BufferSize > 0 {
-				writer_opts = append(writer_opts, WithBufferSize(rule.BufferSize))
-			}
-
-			if rule.FileSize > 0 {
-				writer_opts = append(writer_opts, WithFileSize(rule.FileSize))
-			}
-
-			writer_opts = append(writer_opts, WithCompress(rule.Compress))
-			if rule.Compress {
-				writer_opts = append(writer_opts, WithCompressBefore(rule.CompressBefore))
-			}
-
-			writer_opts = append(writer_opts, WithRemove(rule.Remove))
-			if rule.Remove {
-				writer_opts = append(writer_opts, WithRemoveBefore(rule.RemoveBefore))
-			}
-
-			writer, err = NewFileWriter(rule.Path, rule.NamingFormat, writer_opts...)
+			writer, err = NewFileWriter(rule.Path, rule.NamingFormat, buildFileWriterOpts(rule)...)
 			if err != nil {
 				return err
 			}
 			writers[key] = writer
-		}
-
-		if writer_levels[writer] == nil {
-			writer_levels[writer] = []string{}
 		}
 
 		writer_levels[writer] = append(writer_levels[writer], level_name)
@@ -236,38 +263,14 @@ func (l *Logger) UseFileWriter(file_rule *LogFileRule, file_level_rule map[strin
 	for _, level_name := range []string{"FATAL", "ERROR", "WARN", "NOTICE", "INFO", "DEBUG"} {
 		if _, ok := conf[level_name]; !ok {
 			conf[level_name] = def_key
+
 			writer, ok := writers[def_key]
 			if !ok {
-				var writer_opts []FuncOption
-
-				if file_rule.BufferSize > 0 {
-					writer_opts = append(writer_opts, WithBufferSize(file_rule.BufferSize))
-				}
-
-				if file_rule.FileSize > 0 {
-					writer_opts = append(writer_opts, WithFileSize(file_rule.FileSize))
-				}
-
-				writer_opts = append(writer_opts, WithCompress(file_rule.Compress))
-				if file_rule.Compress {
-					writer_opts = append(writer_opts, WithCompressBefore(file_rule.CompressBefore))
-				}
-
-				writer_opts = append(writer_opts, WithRemove(file_rule.Remove))
-				if file_rule.Remove {
-					writer_opts = append(writer_opts, WithRemoveBefore(file_rule.RemoveBefore))
-				}
-
-				writer, err = NewFileWriter(file_rule.Path, file_rule.NamingFormat, writer_opts...)
+				writer, err = NewFileWriter(file_rule.Path, file_rule.NamingFormat, buildFileWriterOpts(file_rule)...)
 				if err != nil {
 					return err
 				}
-
 				writers[def_key] = writer
-			}
-
-			if writer_levels[writer] == nil {
-				writer_levels[writer] = []string{}
 			}
 
 			writer_levels[writer] = append(writer_levels[writer], level_name)
@@ -295,17 +298,20 @@ func (l *Logger) processLogs() { // {{{
 			for len(l.queue) > 0 {
 				bulk := <-l.queue
 				l.prepareWrite(bulk.GetEntrys()...)
-				PutBulk(bulk)
+				bulk.Reset()
+				l.bulkPool.Put(bulk)
 			}
 
 			// 处理未进入队列的数据
 			l.prepareWrite(l.bulk.GetEntrys()...)
-			PutBulk(l.bulk)
+			l.bulk.Reset()
+			l.bulkPool.Put(l.bulk)
 			l.bulk = nil
 			return
 		case bulk := <-l.queue:
 			l.prepareWrite(bulk.GetEntrys()...)
-			PutBulk(bulk)
+			bulk.Reset()
+			l.bulkPool.Put(bulk)
 		case <-ticker.C:
 			// 定时刷新缓冲区
 			l.autoFlush()
@@ -320,7 +326,7 @@ func (l *Logger) autoFlush() { // {{{
 
 	select {
 	case l.queue <- l.bulk:
-		l.bulk = GetBulk()
+		l.bulk = l.bulkPool.Get().(*Bulk)
 
 		//fmt.Println("log queue size:", l.queueSize, len(l.queue))
 	default:
@@ -395,11 +401,13 @@ func (l *Logger) write(entry *Entry) { // {{{
 			//l.buffer.Put(l.bulk)
 			select {
 			case l.queue <- l.bulk:
-				l.bulk = GetBulk()
+				l.bulk = l.bulkPool.Get().(*Bulk)
+
 			default: // 队列写满后尝试直接写
 				l.prepareWrite(l.bulk.GetEntrys()...)
-				PutBulk(l.bulk)
-				l.bulk = GetBulk()
+				l.bulk.Reset()
+				l.bulkPool.Put(l.bulk)
+				l.bulk = l.bulkPool.Get().(*Bulk)
 
 				//	fmt.Println("log channel full, queue size:", l.queueSize, len(l.queue))
 			}
@@ -594,7 +602,7 @@ func (l *Logger) Logf(level_name, msg string, args ...any) { // {{{
 // 只使用指定的 writer (关闭其他writer)
 func (l *Logger) SetWriter(w io.Writer) { // {{{
 	l.writer = w
-	l.writers = map[io.Writer]struct{}{w: struct{}{}}
+	l.writers = map[io.Writer]struct{}{w: {}}
 } // }}}
 
 // 增加新的 writer, 将使用 MultiWriter, 同时指定接收的日志级别名称，不在范围内的不写入此 writer
@@ -654,6 +662,4 @@ func (l *Logger) Close() { // {{{
 
 	l.writers = make(map[io.Writer]struct{})
 	l.updateMultiWriter()
-
-	return
 } // }}}

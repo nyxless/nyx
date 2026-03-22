@@ -4,12 +4,14 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/nyxless/nyx/x/endless"
 	"io/fs"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"reflect"
+
+	"github.com/nyxless/nyx/x/endless"
+
 	//"runtime"
 	"runtime/debug"
 	"strings"
@@ -92,7 +94,7 @@ func (hs *HttpServer) Run() { // {{{
 	}
 
 	//runtime.GOMAXPROCS(runtime.NumCPU())
-	addr := fmt.Sprintf("%s:%d", Conf.GetString("http_sever", "addr"), Conf.GetDefInt(80, "http_server", "port"))
+	addr := fmt.Sprintf("%s:%d", Conf.GetString("http_server", "addr"), Conf.GetDefInt(80, "http_server", "port"))
 
 	Info("HttpServer Listen", addr)
 
@@ -206,9 +208,9 @@ func (h *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request) { 
 		*r = *(r.WithContext(ctx))
 	}()
 
-	group := ctx.Value("group").(string)
-	controller_name := ctx.Value("controller").(string)
-	action_name := ctx.Value("action").(string)
+	group, _ := ctx.Value("group").(string)
+	controller_name, _ := ctx.Value("controller").(string)
+	action_name, _ := ctx.Value("action").(string)
 
 	// 先尝试执行预生成函数
 	if cf, ok := h.routeFuncs[controller_name]; ok {

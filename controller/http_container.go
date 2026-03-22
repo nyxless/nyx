@@ -378,10 +378,10 @@ func (h *httpContainer) GetJsonMap(key string) x.MAP { // {{{
 	return x.MAP{}
 } // }}}
 
-func (h *httpContainer) GetSlice(key string, separators ...string) []any { // {{{
+func (h *httpContainer) GetSlice(key string, defaultValues ...[]any) []any { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {
-			return x.AsSlice(v, separators...)
+			return x.AsSlice(v, defaultValues...)
 		}
 	}
 
@@ -401,7 +401,7 @@ func (h *httpContainer) GetSlice(key string, separators ...string) []any { // {{
 		}
 
 		// 格式: key=123,456
-		return x.Split(v[0], separators...)
+		return x.Split(v[0])
 	}
 
 	// 格式: key[]=123&key[]=456
@@ -410,13 +410,17 @@ func (h *httpContainer) GetSlice(key string, separators ...string) []any { // {{
 		return collect(v)
 	}
 
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
 	return []any{}
 } // }}}
 
-func (h *httpContainer) GetStringSlice(key string, separators ...string) []string { // {{{
+func (h *httpContainer) GetStringSlice(key string, defaultValues ...[]string) []string { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {
-			return x.AsStringSlice(v, separators...)
+			return x.AsStringSlice(v, defaultValues...)
 		}
 	}
 
@@ -436,7 +440,7 @@ func (h *httpContainer) GetStringSlice(key string, separators ...string) []strin
 		}
 
 		// 格式: key=123,456
-		return x.SplitString(v[0], separators...)
+		return x.SplitString(v[0])
 	}
 
 	// 格式: key[]=123&key[]=456
@@ -445,13 +449,17 @@ func (h *httpContainer) GetStringSlice(key string, separators ...string) []strin
 		return collect(v)
 	}
 
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
 	return []string{}
 } // }}}
 
-func (h *httpContainer) GetIntSlice(key string, separators ...string) []int { // {{{
+func (h *httpContainer) GetIntSlice(key string, defaultValues ...[]int) []int { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {
-			return x.AsIntSlice(v, separators...)
+			return x.AsIntSlice(v, defaultValues...)
 		}
 	}
 
@@ -471,7 +479,7 @@ func (h *httpContainer) GetIntSlice(key string, separators ...string) []int { //
 		}
 
 		// 格式: key=123,456
-		return x.SplitInt(v[0], separators...)
+		return x.SplitInt(v[0])
 	}
 
 	// 格式: key[]=123&key[]=456
@@ -480,13 +488,17 @@ func (h *httpContainer) GetIntSlice(key string, separators ...string) []int { //
 		return collect(v)
 	}
 
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
 	return []int{}
 } // }}}
 
-func (h *httpContainer) GetInt32Slice(key string, separators ...string) []int32 { // {{{
+func (h *httpContainer) GetInt32Slice(key string, defaultValues ...[]int32) []int32 { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {
-			return x.AsInt32Slice(v, separators...)
+			return x.AsInt32Slice(v, defaultValues...)
 		}
 	}
 
@@ -506,7 +518,7 @@ func (h *httpContainer) GetInt32Slice(key string, separators ...string) []int32 
 		}
 
 		// 格式: key=123,456
-		return x.SplitInt32(v[0], separators...)
+		return x.SplitInt32(v[0])
 	}
 
 	// 格式: key[]=123&key[]=456
@@ -515,13 +527,17 @@ func (h *httpContainer) GetInt32Slice(key string, separators ...string) []int32 
 		return collect(v)
 	}
 
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
+	}
+
 	return []int32{}
 } // }}}
 
-func (h *httpContainer) GetInt64Slice(key string, separators ...string) []int64 { // {{{
+func (h *httpContainer) GetInt64Slice(key string, defaultValues ...[]int64) []int64 { // {{{
 	if h.JsonForm != nil {
 		if v, ok := h.JsonForm[key]; ok {
-			return x.AsInt64Slice(v, separators...)
+			return x.AsInt64Slice(v, defaultValues...)
 		}
 	}
 
@@ -541,13 +557,17 @@ func (h *httpContainer) GetInt64Slice(key string, separators ...string) []int64 
 		}
 
 		// 格式: key=123,456
-		return x.SplitInt64(v[0], separators...)
+		return x.SplitInt64(v[0])
 	}
 
 	// 格式: key[]=123&key[]=456
 	key = key + "[]"
 	if v, ok := h.Form[key]; ok && len(v) > 0 {
 		return collect(v)
+	}
+
+	if len(defaultValues) > 0 {
+		return defaultValues[0]
 	}
 
 	return []int64{}

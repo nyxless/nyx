@@ -3,10 +3,11 @@ package x
 import (
 	"bufio"
 	"fmt"
-	"github.com/nyxless/nyx/x/endless"
 	"log"
 	"net"
 	"runtime/debug"
+
+	"github.com/nyxless/nyx/x/endless"
 )
 
 var (
@@ -60,14 +61,15 @@ func (t *TcpServer) Run() { // {{{
 	log.Println("TcpServer Listen", addr)
 
 	if Conf.GetDefBool(true, "tcp_server", "use_graceful") {
-		log.Println(endless.ListenAndServeTcp(addr, "tcp4", t))
+		Warn(endless.ListenAndServeTcp(addr, "tcp4", t))
 	} else {
 		listener, err := t.listenTCP(addr)
 		if err != nil {
-			log.Println("TcpServer Listen error:", err)
+			Warn(err)
+			return
 		}
 
-		t.Serve(listener)
+		Warn(t.Serve(listener))
 	}
 } // }}}
 

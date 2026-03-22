@@ -3,12 +3,14 @@ package x
 import (
 	"context"
 	"fmt"
-	"github.com/nyxless/nyx/x/endless"
-	"github.com/nyxless/nyx/x/pb"
-	"google.golang.org/grpc"
 	"net"
 	"reflect"
 	"time"
+
+	"github.com/nyxless/nyx/x/endless"
+	"github.com/nyxless/nyx/x/pb"
+	"google.golang.org/grpc"
+
 	//"runtime"
 	"runtime/debug"
 	"strings"
@@ -101,7 +103,7 @@ func (rs *RpcServer) Run() { // {{{
 			return
 		}
 
-		rpcServer.Serve(lis)
+		Warn(rpcServer.Serve(lis))
 	}
 } // }}}
 

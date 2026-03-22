@@ -232,8 +232,11 @@ func MapToString(m MAP) string { // {{{
 } // }}}
 
 // any的切片转换为int切片
-func AsIntSlice(v any, separators ...string) []int { // {{{
+func AsIntSlice(v any, def ...[]int) []int { // {{{
 	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
 		return []int{}
 	}
 
@@ -326,8 +329,15 @@ func AsIntSlice(v any, separators ...string) []int { // {{{
 			nums[i] = AsInt(val[i])
 		}
 	case string:
-		return SplitInt(val, separators...)
+		nums = SplitInt(val)
+		if nums == nil && len(def) > 0 {
+			return def[0]
+		}
 	default:
+		if len(def) > 0 {
+			return def[0]
+		}
+
 		if Debug {
 			Noticef("[AsIntSlice] try to use reflect for type %T: %v", v, v)
 		}
@@ -370,8 +380,11 @@ func AsIntSlice(v any, separators ...string) []int { // {{{
 } // }}}
 
 // any的切片转换为int32切片
-func AsInt32Slice(v any, separators ...string) []int32 { // {{{
+func AsInt32Slice(v any, def ...[]int32) []int32 { // {{{
 	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
 		return []int32{}
 	}
 
@@ -460,11 +473,16 @@ func AsInt32Slice(v any, separators ...string) []int32 { // {{{
 		for i := range val {
 			nums[i] = AsInt32(val[i])
 		}
-
 	case string:
-		nums = SplitInt32(val, separators...)
-
+		nums = SplitInt32(val)
+		if nums == nil && len(def) > 0 {
+			return def[0]
+		}
 	default:
+		if len(def) > 0 {
+			return def[0]
+		}
+
 		if Debug {
 			Noticef("[AsInt32Slice] try to use reflect for type %T: %v", v, v)
 		}
@@ -494,8 +512,11 @@ func AsInt32Slice(v any, separators ...string) []int32 { // {{{
 } // }}}
 
 // any的切片转换为int64切片
-func AsInt64Slice(v any, separators ...string) []int64 { // {{{
+func AsInt64Slice(v any, def ...[]int64) []int64 { // {{{
 	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
 		return []int64{}
 	}
 
@@ -584,8 +605,15 @@ func AsInt64Slice(v any, separators ...string) []int64 { // {{{
 			nums[i] = AsInt64(val[i])
 		}
 	case string:
-		nums = SplitInt64(val, separators...)
+		nums = SplitInt64(val)
+		if nums == nil && len(def) > 0 {
+			return def[0]
+		}
 	default:
+		if len(def) > 0 {
+			return def[0]
+		}
+
 		if Debug {
 			Noticef("[AsInt64Slice] try to use reflect for type %T: %v", v, v)
 		}
@@ -615,8 +643,11 @@ func AsInt64Slice(v any, separators ...string) []int64 { // {{{
 } // }}}
 
 // any 类型的切片转换为 string 类型切片
-func AsStringSlice(v any, separators ...string) []string { // {{{
+func AsStringSlice(v any, def ...[]string) []string { // {{{
 	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
 		return []string{}
 	}
 
@@ -723,8 +754,15 @@ func AsStringSlice(v any, separators ...string) []string { // {{{
 			strs[i] = val[i].String()
 		}
 	case string:
-		return SplitString(val, separators...)
+		strs = SplitString(val)
+		if strs == nil && len(def) > 0 {
+			return def[0]
+		}
 	default:
+		if len(def) > 0 {
+			return def[0]
+		}
+
 		if Debug {
 			Noticef("[AsStringSlice] try to use reflect for type %T: %v", v, v)
 		}
@@ -753,8 +791,11 @@ func AsStringSlice(v any, separators ...string) []string { // {{{
 	return strs
 } // }}}
 
-func AsSlice(v any, separators ...string) []any { // {{{
+func AsSlice(v any, def ...[]any) []any { // {{{
 	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
 		return []any{}
 	}
 
@@ -870,8 +911,16 @@ func AsSlice(v any, separators ...string) []any { // {{{
 		}
 		return arr
 	case string:
-		return Split(val, separators...)
+		arr := Split(val)
+		if arr == nil && len(def) > 0 {
+			return def[0]
+		}
+		return arr
 	default:
+		if len(def) > 0 {
+			return def[0]
+		}
+
 		if Debug {
 			Noticef("[AsSlice] try to use reflect for type %T: %v", v, v)
 		}
@@ -1496,7 +1545,6 @@ func ArrayIntersect[T any](a, b []T) []T { // {{{
 		return intersect(a, b)
 	}
 
-	fmt.Println(333)
 	// 不可比较类型用 DeepEqual
 	return intersectDeep(a, b) // 用 DeepEqual，O(n*m)
 } // }}}

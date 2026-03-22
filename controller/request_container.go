@@ -44,16 +44,16 @@ type requestContainer interface { // {{{
 	GetFloat64(key string, defaultValues ...float64) float64
 	// 获取json字符串并转换为MAP
 	GetJsonMap(key string) x.MAP
-	// 获取[]any 类型参数，若值为字符分隔的字符串, 会分割并转换成[]any
-	GetSlice(key string, separators ...string) []any
-	// 获取[]string 类型参数，若值为字符分隔的字符串, 会分割并转换成[]string
-	GetStringSlice(key string, separators ...string) []string
-	// 获取[]int 类型参数，若值为字符分隔的字符串, 会分割并转换成[]int
-	GetIntSlice(key string, separators ...string) []int
-	// 获取[]int32 类型参数，若值为字符分隔的字符串, 会分割并转换成[]int32
-	GetInt32Slice(key string, separators ...string) []int32
-	// 获取[]int64  类型参数，若值为字符分隔的字符串, 会分割并转换成[]int64
-	GetInt64Slice(key string, separators ...string) []int64
+	// 获取[]any 类型参数，若值为`,`分隔的字符串, 会分割并转换成[]any
+	GetSlice(key string, defaultValues ...[]any) []any
+	// 获取[]string 类型参数，若值为`,`分隔的字符串, 会分割并转换成[]string
+	GetStringSlice(key string, defaultValues ...[]string) []string
+	// 获取[]int 类型参数，若值为`,`分隔的字符串, 会分割并转换成[]int
+	GetIntSlice(key string, defaultValues ...[]int) []int
+	// 获取[]int32 类型参数，若值为`,`分隔的字符串, 会分割并转换成[]int32
+	GetInt32Slice(key string, defaultValues ...[]int32) []int32
+	// 获取[]int64  类型参数，若值为`,`分隔的字符串, 会分割并转换成[]int64
+	GetInt64Slice(key string, defaultValues ...[]int64) []int64
 	// 获取[]map[string]any类型参数, 或强制转换类型
 	GetMapSlice(key string) []x.MAP
 	// 获取bytes类型参数, 或强制转换类型

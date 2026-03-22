@@ -3,19 +3,19 @@ package nyx
 import (
 	"flag"
 	"fmt"
-	"github.com/nyxless/nyx/middleware"
-	"github.com/nyxless/nyx/tools"
-	"github.com/nyxless/nyx/x"
-	"github.com/nyxless/nyx/x/cache"
-	"github.com/nyxless/nyx/x/log"
-	"google.golang.org/grpc"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nyxless/nyx/middleware"
+	"github.com/nyxless/nyx/tools"
+	"github.com/nyxless/nyx/x"
+	"github.com/nyxless/nyx/x/cache"
+	"github.com/nyxless/nyx/x/log"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -80,7 +80,7 @@ func (n *Nyx) envInit() { // {{{
 	app_root, err := os.Getwd()
 	if err != nil {
 		x.Warn("Error: ", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	if path.Base(app_root) == "bin" {
@@ -92,7 +92,7 @@ func (n *Nyx) envInit() { // {{{
 	config, config_file, err := x.NewConfig(config_file, x.AppRoot+"/conf/app.conf", "../conf/app.conf", "./conf/app.conf", "app.conf") //按顺序寻找配置文件
 	if nil != err {
 		x.Warn("Error: ", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	x.Info("Config Init: ", config_file)
@@ -122,7 +122,7 @@ func (n *Nyx) envInit() { // {{{
 	err = n.useLogger()
 	if nil != err {
 		x.Println("Error: ", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	// 初始化本地缓存
@@ -302,7 +302,7 @@ func (n *Nyx) cacheConf() { // {{{
 	x.ConfStaticRoot = static_root
 
 	x.ConfDebugRpcEnabled = x.Conf.GetDefBool(false, "http_server", "debug_rpc", "enabled")
-	x.ConfDebugRpcAppid = x.Conf.GetDefString("test", "http_server", "debug_rpc", "apid")
+	x.ConfDebugRpcAppid = x.Conf.GetDefString("test", "http_server", "debug_rpc", "appid")
 	x.ConfDebugRpcSecret = x.Conf.GetDefString("test", "http_server", "debug_rpc", "secret")
 	x.ConfDebugRpcTimeout = x.Conf.GetDefInt(60, "http_server", "debug_rpc", "timeout")
 	x.ConfHttpLogOmitParams = x.Conf.GetStringSlice("http_log", "omit_params")
@@ -574,17 +574,17 @@ func (n *Nyx) useLocalCache() { // {{{
 } // }}}
 
 // 添加http 方法对应的controller实例, 支持分组; 默认url路径: controller/action, 分组时路径: group/controller/action
-func AddApi(c interface{}, group ...string) {
+func AddApi(c any, group ...string) {
 	x.AddApi(c, group...)
 }
 
 // 添加rpc 方法对应的controller实例
-func AddRpc(c interface{}, group ...string) {
+func AddRpc(c any, group ...string) {
 	x.AddRpc(c, group...)
 }
 
 // 添加cli 方法对应的controller实例
-func AddCli(c interface{}) {
+func AddCli(c any) {
 	x.AddCli(c)
 }
 
@@ -636,7 +636,7 @@ func (n *Nyx) run(modes ...string) { // {{{
 
 	if len(modes) == 0 {
 		x.Warn("Error: ", "未指定运行模式")
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	var monitor_port string
@@ -700,7 +700,7 @@ func (n *Nyx) run(modes ...string) { // {{{
 
 		default:
 			x.Warn("Error: ", "未指定正确的运行模式")
-			os.Exit(0)
+			os.Exit(1)
 		}
 
 		x.Success("======= " + mode + " Server Start: " + x.DateTime() + " " + x.TIME_ZONE + " ======")
@@ -718,7 +718,7 @@ func (n *Nyx) run(modes ...string) { // {{{
 // 生成pid文件
 func (n *Nyx) genPidFile() { // {{{
 	pid := os.Getpid()
-	ioutil.WriteFile(x.Conf.GetDefString("./pid", "app_pid_file"), x.AsBytes(pid), 0777)
+	os.WriteFile(x.Conf.GetDefString("./pid", "app_pid_file"), x.AsBytes(pid), 0644)
 
 	x.Info("Pid: ", pid)
 } // }}}

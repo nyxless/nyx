@@ -39,7 +39,9 @@ func (s *SqlClient) SetDB(dbt string, _db *sql.DB) error { // {{{
 } // }}}
 
 func (s *SqlClient) Close() { //{{{
-	s.db.Close()
+	if s.db != nil {
+		s.db.Close()
+	}
 } //}}}
 
 func (s *SqlClient) Ping(ctx context.Context) error { //{{{
@@ -57,7 +59,7 @@ func (s *SqlClient) Type() string { //{{{
 func (s *SqlClient) ID() string { //{{{
 	if s.id == "" {
 		id := fmt.Sprintf("%p", &s.db)
-		s.id = id[max(0, len(id)-5):]
+		s.id = id[max(0, len(id)-4):]
 	}
 
 	return s.id
@@ -185,7 +187,7 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		if err.Error() == "LastInsertId is not supported by this driver" {
+		if strings.Contains(err.Error(), "not supported by this driver") {
 			return 0, nil
 		}
 
@@ -310,7 +312,7 @@ func (s *SqlClient) Upsert(table string, vals map[string]any, ignore_fields ...s
 
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		if err.Error() == "LastInsertId is not supported by this driver" {
+		if strings.Contains(err.Error(), "not supported by this driver") {
 			return 0, nil
 		}
 		return 0, err
@@ -364,15 +366,14 @@ func (s *SqlClient) Execute(sqlstr string, val ...any) (int, error) { // {{{
 } // }}}
 
 func (s *SqlClient) Exec(sqlstr string, val ...any) (result sql.Result, err error) { // {{{
-	var start_time time.Time
 	if s.Debug {
-		start_time = time.Now()
+		startTime := time.Now()
+		defer s.debugSql(sqlstr, val, startTime)
 	}
 
 	result, err = s.executor.Exec(sqlstr, val...)
 
 	if s.Debug {
-		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, val), "#ID": s.id})
 	}
 
 	return result, errorHandle(err)
@@ -399,17 +400,12 @@ func (s *SqlClient) QueryOne(options ...FnSqlOption) (any, error) { // {{{
 	var value any
 	var err error
 
-	var start_time time.Time
 	if s.Debug {
-		start_time = time.Now()
+		startTime := time.Now()
+		defer s.debugSql(sqlstr, vals, startTime)
 	}
 
 	err = s.executor.QueryRow(sqlstr, vals...).Scan(&value)
-	if s.Debug {
-		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, vals), "#ID": s.ID()})
-		s.explain(sqlstr, vals...)
-	}
-
 	if err != nil {
 		return nil, errorHandle(err)
 	}
@@ -454,17 +450,12 @@ func (s *SqlClient) QueryStream(options ...FnSqlOption) (*RowIter, error) { //{{
 	sqlOption := s.parseOptions(options)
 	sqlstr, vals := sqlOption.ToSql()
 
-	var start_time time.Time
 	if s.Debug {
-		start_time = time.Now()
+		startTime := time.Now()
+		defer s.debugSql(sqlstr, vals, startTime)
 	}
 
 	rows, err := s.executor.Query(sqlstr, vals...)
-
-	if s.Debug {
-		log.Println(map[string]any{"intx": s.intx, "consume": time.Now().Sub(start_time).Nanoseconds() / 1000 / 1000, "sql": debugSql(sqlstr, vals), "#ID": s.ID()})
-		s.explain(sqlstr, vals...)
-	}
 
 	if err != nil {
 		return nil, errorHandle(err)
@@ -482,31 +473,42 @@ func (s *SqlClient) parseOptions(options []FnSqlOption) *SqlOption { //{{{
 	return so
 } // }}}
 
-func (s *SqlClient) explain(sqlstr string, val ...any) { //{{{
-	if len(sqlstr) > 6 && bytes.EqualFold([]byte(sqlstr)[0:6], []byte("SELECT")) {
-		expl_results := []map[string]any{}
-		sqlOptions := []FnSqlOption{
-			WithSql("explain "+sqlstr, val),
-		}
-		if s.intx {
-			expl_results, _ = s.p.Query(sqlOptions...)
-		} else {
-			expl_results, _ = s.Query(sqlOptions...)
-		}
-		expl := &SqlExplain{s.dbType, expl_results}
-		expl.DrawConsole()
+func (s *SqlClient) explain(sqlstr string, val []any) { //{{{
+	expl_results := []map[string]any{}
+	sqlOptions := []FnSqlOption{
+		WithSql("EXPLAIN "+sqlstr, val),
 	}
+	if s.intx {
+		expl_results, _ = s.p.Query(sqlOptions...)
+	} else {
+		expl_results, _ = s.Query(sqlOptions...)
+	}
+	expl := &SqlExplain{s.dbType, expl_results}
+	expl.DrawConsole()
 } // }}}
 
-func debugSql(query string, args []interface{}) string { // {{{
-	if len(args) == 0 {
-		return query
+func (s *SqlClient) debugSql(query string, args []any, startTime time.Time) { // {{{
+	var prefix string
+	if len(query) > 6 {
+		prefix = query[0:7]
 	}
 
-	for _, arg := range args {
-		query = strings.Replace(query, "?", formatArg(arg), 1)
+	if prefix == "EXPLAIN" {
+		return
 	}
-	return query
+
+	sql := query
+	if len(args) > 0 {
+		for _, arg := range args {
+			sql = strings.Replace(sql, "?", formatArg(arg), 1)
+		}
+	}
+
+	log.Printf("#ID:%s tx:%v consume:%d sql: %s", s.ID(), s.intx, time.Since(startTime).Nanoseconds()/1000/1000, sql)
+
+	if prefix == "SELECT " {
+		s.explain(query, args)
+	}
 } // }}}
 
 func formatArg(arg interface{}) string { // {{{

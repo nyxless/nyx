@@ -3,13 +3,14 @@ package x
 import (
 	"bufio"
 	"fmt"
-	"github.com/nyxless/nyx/x/endless"
-	"golang.org/x/net/websocket"
 	"log"
 	"net"
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/nyxless/nyx/x/endless"
+	"golang.org/x/net/websocket"
 )
 
 var (
@@ -86,7 +87,7 @@ func (w *WsServer) Run() { // {{{
 	wtimeout := time.Duration(Conf.GetInt("ws_server", "write_timeout")) * time.Millisecond
 
 	if Conf.GetDefBool(true, "ws_server", "use_graceful") {
-		log.Println(endless.ListenAndServe(addr, mux, rtimeout, wtimeout, w.maxHeaderBytes))
+		Warn(endless.ListenAndServe(addr, mux, rtimeout, wtimeout, w.maxHeaderBytes))
 	} else {
 		httpServer := &http.Server{
 			Addr:           addr,
@@ -98,11 +99,11 @@ func (w *WsServer) Run() { // {{{
 
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
-			log.Println("websocket Listen error:", err)
+			Warn(err)
+			return
 		}
 
-		httpServer.Serve(NewTCPKeepAliveListener(ln.(*net.TCPListener), time.Minute*3))
-
+		Warn(httpServer.Serve(NewTCPKeepAliveListener(ln.(*net.TCPListener), time.Minute*3)))
 	}
 } // }}}
 

@@ -3,10 +3,11 @@ package x
 import (
 	"context"
 	"fmt"
-	"github.com/nyxless/nyx/x/redis"
-	"golang.org/x/sync/singleflight"
 	"sync"
 	"time"
+
+	"github.com/nyxless/nyx/x/redis"
+	"golang.org/x/sync/singleflight"
 )
 
 func NewRedisProxy() *RedisProxy {
@@ -145,11 +146,11 @@ func (r *RedisProxy) add(conf MAP, key string) (*redis.RedisClient, error) { //{
 	}
 
 	if conn_max_idle_time, ok := conf["conn_max_idle_time"]; ok {
-		options.ConnMaxIdleTime = time.Duration(AsInt(conn_max_idle_time))
+		options.ConnMaxIdleTime = time.Duration(AsInt(conn_max_idle_time)) * time.Second
 	}
 
 	if conn_max_lifetime, ok := conf["conn_max_lifetime"]; ok {
-		options.ConnMaxLifetime = time.Duration(AsInt(conn_max_lifetime))
+		options.ConnMaxLifetime = time.Duration(AsInt(conn_max_lifetime)) * time.Second
 	}
 
 	if read_timeout, ok := conf["read_timeout"]; ok {

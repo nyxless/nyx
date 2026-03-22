@@ -36,10 +36,11 @@ func GetEntry(is_format_msg bool, time_format, level_name, msg string, args ...a
 	entry := entryPool.Get().(*Entry)
 
 	t := time.Now()
-	if time_format != "" {
-		entry.Time = t.Format(time_format)
-	} else {
+
+	if time_format == "" || time_format == "TIMESTAMP" {
 		entry.Time = strconv.FormatInt(t.Unix(), 10)
+	} else {
+		entry.Time = t.Format(time_format)
 	}
 
 	entry.Level = level_name
@@ -51,12 +52,11 @@ func GetEntry(is_format_msg bool, time_format, level_name, msg string, args ...a
 }
 
 func PutEntry(entry *Entry) {
-	// 重置entry状态
 	entry.Level = ""
 	entry.Time = ""
 	entry.File = ""
 	entry.Msg = ""
-	entry.Args = []any{}
+	entry.Args = entry.Args[:0]
 	entry.Formated = false
 	entryPool.Put(entry)
 }

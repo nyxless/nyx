@@ -159,7 +159,7 @@ func (d *DBProxy) add(conf MAP, key string) (db.DBClient, error) { // {{{
 	d.c[key] = client
 	d.mutex.Unlock()
 
-	Info("Add DBProxy:", fmt.Sprintf(" host [ %s ], type [ %s ] db [ %s ], #ID [ %s ]", conf["host"], dbt, conf["database"], client.ID()))
+	Info("Add DBProxy:", fmt.Sprintf(" host [ %s ] type [ %s ] db [ %s ] debug [ %v ] #ID [ %s ]", conf["host"], dbt, conf["database"], debug, client.ID()))
 
 	return client, nil
 } // }}}

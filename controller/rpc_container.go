@@ -90,24 +90,24 @@ func (r *rpcContainer) GetJsonMap(key string) x.MAP { // {{{
 	return x.AsMap(x.JsonDecode(r.RpcForm[key]))
 } // }}}
 
-func (r *rpcContainer) GetSlice(key string, separators ...string) []any { // {{{
-	return x.AsSlice(r.RpcForm[key], separators...)
+func (r *rpcContainer) GetSlice(key string, defaultValues ...[]any) []any { // {{{
+	return x.AsSlice(r.RpcForm[key], defaultValues...)
 } // }}}
 
-func (r *rpcContainer) GetStringSlice(key string, separators ...string) []string { // {{{
-	return x.AsStringSlice(r.RpcForm[key], separators...)
+func (r *rpcContainer) GetStringSlice(key string, defaultValues ...[]string) []string { // {{{
+	return x.AsStringSlice(r.RpcForm[key], defaultValues...)
 } // }}}
 
-func (r *rpcContainer) GetIntSlice(key string, separators ...string) []int { // {{{
-	return x.AsIntSlice(r.RpcForm[key], separators...)
+func (r *rpcContainer) GetIntSlice(key string, defaultValues ...[]int) []int { // {{{
+	return x.AsIntSlice(r.RpcForm[key], defaultValues...)
 } // }}}
 
-func (r *rpcContainer) GetInt32Slice(key string, separators ...string) []int32 { // {{{
-	return x.AsInt32Slice(r.RpcForm[key], separators...)
+func (r *rpcContainer) GetInt32Slice(key string, defaultValues ...[]int32) []int32 { // {{{
+	return x.AsInt32Slice(r.RpcForm[key], defaultValues...)
 } // }}}
 
-func (r *rpcContainer) GetInt64Slice(key string, separators ...string) []int64 { // {{{
-	return x.AsInt64Slice(r.RpcForm[key], separators...)
+func (r *rpcContainer) GetInt64Slice(key string, defaultValues ...[]int64) []int64 { // {{{
+	return x.AsInt64Slice(r.RpcForm[key], defaultValues...)
 } // }}}
 
 func (r *rpcContainer) GetMapSlice(key string) []x.MAP { // {{{
