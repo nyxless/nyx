@@ -63,28 +63,29 @@ func (c *Controller) SetLang(lang string) { // {{{
 func (c *Controller) GetErrorResponse(err any) (int32, string, x.MAP) { // {{{
 	var errno int32
 	var errmsg string
-	var isbizerr bool
+	var isSysErr bool
 
 	var retdata = make(x.MAP)
 
 	switch errinfo := err.(type) {
 	case string:
-		errno = x.ErrSystem.GetCode()
+		errno = x.ErrOther.GetCode()
 		errmsg = errinfo
 	case *x.Error:
 		errno = errinfo.GetCode()
 		errmsg = errinfo.GetMessage(c.lang)
 		retdata = errinfo.GetData()
-		isbizerr = true
 	case error:
 		errno = x.ErrSystem.GetCode()
 		errmsg = errinfo.Error()
+		isSysErr = true
 	default:
 		errno = x.ErrSystem.GetCode()
 		errmsg = fmt.Sprint(errinfo)
+		isSysErr = true
 	}
 
-	if !isbizerr {
+	if isSysErr {
 		debug_trace := debug.Stack()
 
 		c.SetCtx("debug_trace", errmsg+"\n"+string(debug_trace))

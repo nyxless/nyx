@@ -119,15 +119,11 @@ func (e *Error) Error() string {
 // 捕获异常时，可同时返回data(通过fmts参数最后一个类型为map的值)
 func Interceptor(guard bool, errmsg any, fmts ...any) { // {{{
 	if !guard {
-		var err *Error
 		if v, ok := errmsg.(*Error); ok {
 			v.fmt = fmts
-			err = v
-		} else {
-			err = ErrSystem
-			err.fmt = []any{errmsg}
+			panic(v)
 		}
 
-		panic(err)
+		panic(errmsg)
 	}
 } // }}}

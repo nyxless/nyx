@@ -46,7 +46,7 @@ func (t *TextEncoder) Encode(entry *Entry) ([]byte, error) {
 				b.Write(t.parseField(v))
 			default:
 				b.WriteString("\t")
-				b.WriteString(fmt.Sprint(v))
+				b.WriteString(asString(v))
 			}
 		}
 	}

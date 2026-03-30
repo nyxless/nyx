@@ -35,7 +35,7 @@ func (e *JsonEncoder) Encode(entry *Entry) ([]byte, error) {
 			case Field:
 				m[v.Key] = v.Value
 			default:
-				msg += fmt.Sprint(v)
+				msg += asString(v)
 			}
 		}
 	}

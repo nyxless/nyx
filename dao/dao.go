@@ -14,6 +14,7 @@ import (
 
 type Dao struct {
 	DBWriter, DBReader   db.DBClient
+	intx                 bool //是否使用事务
 	table                string
 	primary              string
 	defaultFields        string   //默认字段,逗号分隔
@@ -21,6 +22,7 @@ type Dao struct {
 	countField           string   //getCount方法使用的字段
 	index                string   //查询使用的索引
 	limit                string
+	lock                 bool //悲观锁
 	autoOrder            bool //是否自动排序(默认按自动主键倒序排序)
 	order                []string
 	group                string
@@ -128,6 +130,7 @@ func (d *Dao) InitTx(tx db.DBClient) { //使用事务{{{
 	d.autoOrder = true
 	d.DBWriter = tx
 	d.DBReader = tx
+	d.intx = true
 } // }}}
 
 func (d *Dao) WithContext(ctx context.Context) *Dao {
@@ -222,6 +225,45 @@ func (d *Dao) UseMaster(flag ...bool) *Dao { // {{{
 	return d
 } // }}}
 
+// alias for UseLock
+func (d *Dao) ForUpdate(flag ...bool) *Dao { // {{{
+	return d.UseLock(flag...)
+} // }}}
+
+// 使用悲观锁
+func (d *Dao) UseLock(flag ...bool) *Dao { // {{{
+	if !d.intx {
+		x.Notice("[UseLock] lock was ignored since no trans")
+		return d
+	}
+
+	lock := true
+	if len(flag) > 0 && !flag[0] {
+		lock = false
+	}
+
+	d.lock = lock
+
+	// 如果已设置使用缓存，则禁用
+	if lock && d.useCache {
+		d.useCache = false
+		d.cacheTtl = 0
+		d.cacheRefreshInterval = 0
+		d.cacheCallbackFn = nil
+
+		x.Notice("[UseLock] cache options is ignored since uselock")
+	}
+
+	return d
+} // }}}
+
+func (d *Dao) getLock() bool { // {{{
+	lock := d.lock
+	d.lock = false
+
+	return lock
+} // }}}
+
 // 返回缓存时间
 func (d *Dao) GetCacheTime() (time.Time, bool) { // {{{
 	cacheTime := d.cacheTime
@@ -240,6 +282,16 @@ func (d *Dao) WithCache(ttl int, callbackFns ...CacheCallbackFn) *Dao { // {{{
 		d.cacheCallbackFn = callbackFns[0]
 	}
 
+	// 如果同时 UseLock，则禁用缓存
+	if d.lock {
+		d.useCache = false
+		d.cacheTtl = 0
+		d.cacheRefreshInterval = 0
+		d.cacheCallbackFn = nil
+
+		x.Notice("[WithCache] cache options is ignored since uselock")
+	}
+
 	return d
 } // }}}
 
@@ -249,6 +301,16 @@ func (d *Dao) WithRefreshCache(refreshInterval int, callbackFns ...CacheCallback
 
 	if len(callbackFns) > 0 {
 		d.cacheCallbackFn = callbackFns[0]
+	}
+
+	// 如果同时 UseLock，则禁用缓存
+	if d.lock {
+		d.useCache = false
+		d.cacheTtl = 0
+		d.cacheRefreshInterval = 0
+		d.cacheCallbackFn = nil
+
+		x.Notice("[WithRefreshCache] cache options is ignored since uselock")
 	}
 
 	return d
@@ -771,6 +833,7 @@ func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
 		db.WithWhere(primary+"=?", []any{id}),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -895,6 +958,7 @@ func (d *Dao) getOne(field string, params ...any) (any, error) { //{{{
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -933,6 +997,7 @@ func (d *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -974,6 +1039,7 @@ func (d *Dao) GetUniqueValues(field string, params ...any) ([]any, error) { //{{
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1020,6 +1086,7 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1054,6 +1121,7 @@ func (d *Dao) GetGroupMap(keyfield string, params ...any) (map[any]map[string]an
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1088,6 +1156,7 @@ func (d *Dao) GetGroupMaps(keyfield string, params ...any) (map[any][]map[string
 		db.WithOrder(d.getOrder(false)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1122,6 +1191,7 @@ func (d *Dao) GetCount(params ...any) (int, error) { //{{{
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithWhere(d.getFilter()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1170,6 +1240,7 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
@@ -1216,6 +1287,7 @@ func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 		db.WithInnerJoin(inner_join),
 		db.WithWhere(where, values),
 		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
 	}
 
 	getRecordsFn := func() (int, any, error) {

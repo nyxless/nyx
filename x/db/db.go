@@ -68,6 +68,7 @@ type SqlOption struct {
 	group     string
 	order     string
 	limits    string
+	lock      bool
 	where     string
 	sql       string //将忽略以上的配置
 	vals      []any
@@ -149,6 +150,10 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 		sb.WriteString(so.limits)
 	}
 
+	if so.lock {
+		sb.WriteString(" FOR UPDATE")
+	}
+
 	return sb.String(), so.vals
 } // }}}
 
@@ -186,6 +191,10 @@ func (so *SqlOption) GetOrder() string { // {{{
 
 func (so *SqlOption) GetLimits() string { // {{{
 	return so.limits
+} // }}}
+
+func (so *SqlOption) GetLock() bool { // {{{
+	return so.lock
 } // }}}
 
 func (so *SqlOption) GetWhere() string { // {{{
@@ -255,6 +264,12 @@ func WithOrder(o string) FnSqlOption { // {{{
 func WithLimits(l string) FnSqlOption { // {{{
 	return func(s *SqlOption) {
 		s.limits = l
+	}
+} // }}}
+
+func WithLock(l bool) FnSqlOption { // {{{
+	return func(s *SqlOption) {
+		s.lock = l
 	}
 } // }}}
 

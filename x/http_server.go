@@ -238,7 +238,7 @@ func (h *httpHandler) defaultHandler(rw http.ResponseWriter, r *http.Request) { 
 	}
 
 	//未预生成代码，使用反射
-	Info("Pre-generated code for " + controller_name + "/" + action_name + " was not found.  Reflection is used now OR U can gen code using shell `nyx init`")
+	Notice("Pre-generated code for " + controller_name + "/" + action_name + " was not found.  Reflection is used now OR U can gen code using shell `nyx init`")
 
 	vc := reflect.New(controllerType)
 	var in []reflect.Value
