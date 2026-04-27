@@ -16,7 +16,7 @@ func getLoc() *time.Location { // {{{
 
 	loc, err := time.LoadLocation(TIME_ZONE)
 	if nil != err {
-		Panic(err)
+		Warn(err)
 	}
 
 	return loc
@@ -45,8 +45,9 @@ func ParseTime(s string, layouts ...string) time.Time { // {{{
 
 	layouts = []string{ // {{{
 		// ISO 8601 格式
-		time.RFC3339Nano,
 		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05 -07:00",
 		"2006-01-02T15:04:05.999Z",
 		"2006-01-02T15:04:05Z",
 		"2006-01-02T15:04:05",

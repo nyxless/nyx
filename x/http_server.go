@@ -156,18 +156,20 @@ func (h *httpHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) { // {{
 	var group, controller_name, action_name string
 	var url_values MAPS
 
-	if ConfPprofEnabled && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
-		h.monitorPprof(rw, r)
-		return
-	} else if ConfStaticEnabled && strings.HasPrefix(r.URL.Path, ConfStaticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
+	if ConfStaticEnabled && strings.HasPrefix(r.URL.Path, ConfStaticPath) { //如果开启了静态资源服务, 相关请求走fileServrer
 		h.serveFile(rw, r)
 		return
-	} else if strings.HasPrefix(r.URL.Path, "/status") { //用于lvs监控
-		h.monitorStatus(rw, r)
-		return
-	} else if ConfDebugRpcEnabled && strings.HasPrefix(r.URL.Path, "/debug/rpc/") { //如果开启了 rpc 选项, 可使用 http 协议代理方式调式 rpc 方法
-		DebugRpc(rw, r)
-		return
+	} else if ConfMonitorPort == "" || ConfMonitorPort == Conf.GetString("http_server", "port") {
+		if ConfPprofEnabled && strings.HasPrefix(r.URL.Path, "/debug/pprof") { //如果开启了pprof, 相关请求走DefaultServeMux
+			http.DefaultServeMux.ServeHTTP(rw, r)
+			return
+		} else if ConfDebugRpcEnabled && strings.HasPrefix(r.URL.Path, "/debug/rpc/") { //如果开启了 rpc 选项, 可使用 http 协议代理方式调式 rpc 方法
+			DebugRpc(rw, r)
+			return
+		} else if strings.HasPrefix(r.URL.Path, ConfMonitorPath) { //用于lvs监控
+			rw.Write([]byte("ok\n"))
+			return
+		}
 	}
 
 	//根据路径路由: User/GetUserInfo
@@ -387,16 +389,6 @@ func (h *httpHandler) serveFile(rw http.ResponseWriter, r *http.Request) {
 	}
 	http.StripPrefix(ConfStaticPath, http.FileServer(filesys)).ServeHTTP(rw, r)
 } // }}}
-
-// pprof监控
-func (h *httpHandler) monitorPprof(rw http.ResponseWriter, r *http.Request) {
-	http.DefaultServeMux.ServeHTTP(rw, r)
-}
-
-// 用于lvs监控
-func (h *httpHandler) monitorStatus(rw http.ResponseWriter, r *http.Request) {
-	rw.Write([]byte("ok\n"))
-}
 
 func (h *httpHandler) addControllers() {
 	for _, v := range defaultApis {

@@ -42,6 +42,8 @@ var (
 	ConfTemplateRoot           string
 	ConfTemplateRecursionLimit int
 	ConfMaxPostSize            int64
+	ConfMonitorPort            string
+	ConfMonitorPath            string
 	ConfPprofEnabled           bool
 	ConfStaticEnabled          bool
 	ConfStaticPath             string

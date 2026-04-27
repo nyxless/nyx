@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -299,7 +300,8 @@ func (fw *FileWriter) removeFiles() error { // {{{
 			return err
 		}
 
-		if matched, err := filepath.Match(maskTime(filepath.Base(fw.namingFormat))+".*", filepath.Base(path)); err == nil && matched {
+		pattern := timePatternToRegex(filepath.Base(fw.namingFormat))
+		if matched, err := regexp.MatchString(pattern, filepath.Base(path)); err == nil && matched {
 			if !info.IsDir() && info.ModTime().Before(cutoff) {
 				if fw.file != nil && path == fw.file.Name() {
 					fmt.Println("skip current file")
@@ -327,7 +329,8 @@ func (fw *FileWriter) compressFiles() error { // {{{
 			return err
 		}
 
-		if matched, err := filepath.Match(maskTime(filepath.Base(fw.namingFormat)), filepath.Base(path)); err == nil && matched {
+		pattern := timePatternToRegex(filepath.Base(fw.namingFormat))
+		if matched, err := regexp.MatchString(pattern, filepath.Base(path)); err == nil && matched {
 			if !info.IsDir() && info.ModTime().Before(cutoff) {
 				fw.compressFile(path)
 			}
@@ -372,14 +375,33 @@ func (fw *FileWriter) compressFile(filename string) { // {{{
 	}
 } // }}}
 
-// 替换时间模板为模糊匹配字符串
-func maskTime(s string) string { // {{{
-	time_vals := []string{"2006", "15", "01", "02", "04", "05", "06"}
-
-	res := s
-	for _, v := range time_vals {
-		res = strings.ReplaceAll(res, v, "*") //strings.Repeat("*", len(v)))
+func timePatternToRegex(timePattern string) string { // {{{
+	// 转义正则特殊字符（除了时间占位符）
+	replacements := map[string]string{
+		"2006":    `\d{4}`,   // 年
+		"01":      `\d{2}`,   // 月
+		"02":      `\d{2}`,   // 日
+		"15":      `\d{2}`,   // 小时 (24小时制)
+		"03":      `\d{2}`,   // 小时 (12小时制)
+		"04":      `\d{2}`,   // 分钟
+		"05":      `\d{2}`,   // 秒
+		"PM":      `(AM|PM)`, // 上午/下午
+		"pm":      `(am|pm)`,
+		"Jan":     `(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)`,
+		"January": `(January|February|March|April|May|June|July|August|September|October|November|December)`,
+		"Mon":     `(Mon|Tue|Wed|Thu|Fri|Sat|Sun)`,
+		"Monday":  `(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)`,
 	}
 
-	return res
+	// 转义正则特殊字符，但保留时间占位符
+	result := regexp.QuoteMeta(timePattern)
+
+	// 取消对时间占位符的转义并替换为正则
+	for placeholder, regexPattern := range replacements {
+		// regexp.QuoteMeta 会将 2006 转义为 \2\0\0\6，需要恢复
+		quoted := regexp.QuoteMeta(placeholder)
+		result = strings.ReplaceAll(result, quoted, regexPattern)
+	}
+
+	return result
 } // }}}

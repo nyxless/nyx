@@ -291,7 +291,6 @@ func (n *Nyx) cacheConf() { // {{{
 	x.ConfTemplateRoot = x.Conf.GetDefString("../templates", "http_server", "template", "root")
 	x.ConfTemplateRecursionLimit = x.Conf.GetDefInt(3, "http_server", "template", "recursion_limit")
 	x.ConfMaxPostSize = int64(x.Conf.GetDefInt(32, "http_server", "max_post_size") << 20)
-	x.ConfPprofEnabled = x.Conf.GetDefBool(false, "http_server", "pprof_enabled")
 	x.ConfStaticEnabled = x.Conf.GetDefBool(false, "http_server", "static_files", "enabled")
 	x.ConfStaticPath = "/" + strings.Trim(x.Conf.GetDefString("static", "http_server", "static_files", "path"), "/")
 
@@ -301,14 +300,18 @@ func (n *Nyx) cacheConf() { // {{{
 	}
 	x.ConfStaticRoot = static_root
 
-	x.ConfDebugRpcEnabled = x.Conf.GetDefBool(false, "http_server", "debug_rpc", "enabled")
-	x.ConfDebugRpcAppid = x.Conf.GetDefString("test", "http_server", "debug_rpc", "appid")
-	x.ConfDebugRpcSecret = x.Conf.GetDefString("test", "http_server", "debug_rpc", "secret")
-	x.ConfDebugRpcTimeout = x.Conf.GetDefInt(60, "http_server", "debug_rpc", "timeout")
+	x.ConfDebugRpcEnabled = x.Conf.GetDefBool(false, "rpc_server", "debug", "enabled")
+	x.ConfDebugRpcAppid = x.Conf.GetDefString("test", "rpc_server", "debug", "appid")
+	x.ConfDebugRpcSecret = x.Conf.GetDefString("test", "rpc_server", "debug", "secret")
+	x.ConfDebugRpcTimeout = x.Conf.GetDefInt(60, "rpc_server", "debug", "timeout")
+
 	x.ConfHttpLogOmitParams = x.Conf.GetStringSlice("http_log", "omit_params")
 	x.ConfRpcLogOmitParams = x.Conf.GetStringSlice("rpc_log", "omit_params")
 	x.ConfDefaultController = strings.ToLower(x.Conf.GetDefString("index", "default_controller"))
 	x.ConfDefaultAction = strings.ToLower(x.Conf.GetDefString("index", "default_action"))
+	x.ConfMonitorPort = x.Conf.GetString("monitor_port")
+	x.ConfMonitorPath = x.Conf.GetDefString("/healthy", "monitor_path")
+	x.ConfPprofEnabled = x.Conf.GetDefBool(false, "pprof_enabled")
 
 	n.parseRouter()
 	n.parseErrMsg()
@@ -639,7 +642,6 @@ func (n *Nyx) run(modes ...string) { // {{{
 		os.Exit(1)
 	}
 
-	var monitor_port string
 	var wg sync.WaitGroup
 	for _, mode := range modes { // {{{
 
@@ -655,7 +657,6 @@ func (n *Nyx) run(modes ...string) { // {{{
 
 		case "rpc":
 			n.useRpcMiddlewares()
-			monitor_port = x.Conf.GetString("rpc_server", "monitor_port")
 
 			wg.Add(1)
 			go func() {
@@ -668,7 +669,6 @@ func (n *Nyx) run(modes ...string) { // {{{
 			}()
 
 		case "tcp":
-			monitor_port = x.Conf.GetString("tcp_server", "monitor_port")
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -680,7 +680,6 @@ func (n *Nyx) run(modes ...string) { // {{{
 			}()
 
 		case "ws":
-			monitor_port = x.Conf.GetString("ws_server", "monitor_port")
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -707,8 +706,8 @@ func (n *Nyx) run(modes ...string) { // {{{
 
 	} // }}}
 
-	if monitor_port != "" {
-		go x.RunMonitor(monitor_port)
+	if x.ConfMonitorPort != "" && x.ConfMonitorPort != x.Conf.GetString("http_server", "port") {
+		go x.RunMonitor(x.ConfMonitorPort)
 	}
 
 	wg.Wait()

@@ -1373,14 +1373,14 @@ func GetSlice(node any, keys ...string) (s []any, found bool) { // {{{
 } // }}}
 
 // 合并MAP(一级)
-func MapMerge[T comparable, K any](m map[T]K, ms ...map[T]K) map[T]K { // {{{
-	for _, v := range ms {
-		for i, j := range v {
-			m[i] = j
+func MapMerge[T comparable, K any](ms ...map[T]K) map[T]K { // {{{
+	result := make(map[T]K)
+	for _, m := range ms {
+		for k, v := range m {
+			result[k] = v
 		}
 	}
-
-	return m
+	return result
 } // }}}
 
 func ArrayColumn[T comparable](m []map[string]T, column string) []T { // {{{
