@@ -27,9 +27,9 @@ func NowTime() time.Time { // {{{
 	return time.Now()
 } // }}}
 
-// int 类型 unix时间戳
-func Now() int { // {{{
-	return int(time.Now().Unix())
+// int64 类型 unix时间戳
+func Now() int64 { // {{{
+	return time.Now().Unix()
 } // }}}
 
 // 时间字符串按 layout 格式转换为 time.Time

@@ -347,7 +347,7 @@ func (tt *TimerTask) executeCallbacks(tasks []*Task) { // {{{
 			if task.Callback != nil {
 				err := task.Callback()
 				if err != nil {
-					tt.errorLogger(fmt.Errorf("timer task err: %v", err))
+					tt.errorLogger(err)
 				}
 			}
 		}()
