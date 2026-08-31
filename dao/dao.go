@@ -702,6 +702,8 @@ func (d *Dao) getFilter() (string, []any) { // {{{
 			}
 		}
 	}
+	//使用后重置
+	d.filter = d.filter[:0]
 
 	return where, values
 } // }}}
