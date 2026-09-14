@@ -130,7 +130,7 @@ func (c *CliServer) serveCli() {
 	in[1] = reflect.ValueOf(controller_name)
 	in[2] = reflect.ValueOf(action_name)
 	in[3] = reflect.ValueOf(group)
-	method = vc.Method(c.methodMap[controller_name]["PrepareCli"])
+	method = vc.Method(c.methodMap[controller_name]["Prepare"])
 	method.Call(in)
 
 	//call Init method if exists
