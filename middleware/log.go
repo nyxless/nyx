@@ -1,13 +1,16 @@
 package middleware
 
 import (
+	"bufio"
 	"bytes"
 	"context"
-	"github.com/nyxless/nyx/x"
-	"github.com/nyxless/nyx/x/log"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+
+	"github.com/nyxless/nyx/x"
+	"github.com/nyxless/nyx/x/log"
 )
 
 type LogConfig struct {
@@ -365,4 +368,20 @@ func (h *httpResponseRecorder) Write(b []byte) (int, error) {
 
 func (h *httpResponseRecorder) Body() string {
 	return h.body.String()
+}
+
+// Flush 透传底层 Flusher，供 SSE / 流式响应使用。
+func (h *httpResponseRecorder) Flush() {
+	if f, ok := h.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack 透传底层 Hijacker，供 WebSocket / 连接接管使用。
+// 底层不支持时（如 HTTP/2）返回 http.ErrNotSupported，避免业务侧断言 panic。
+func (h *httpResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := h.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
 } // }}}
