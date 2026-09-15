@@ -1,14 +1,19 @@
 package controller
 
 import (
+	"bufio"
 	"fmt"
-	"github.com/nyxless/nyx/x"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nyxless/nyx/x"
 )
+
+const defaultBufWriterSize = 4096
 
 type httpContainer struct {
 	Controller
@@ -19,9 +24,11 @@ type httpContainer struct {
 	JsonForm    x.MAP
 	FormMaps    map[string]map[string]any
 	MaxPostSize int64 //post 表单大小
+
+	bufWriter     *bufio.Writer // 流式输出缓冲
+	bufWriterSize int           // 缓冲区大小，<=0 时使用 defaultBufWriterSize
 }
 
-// //
 func (h *httpContainer) Prepare() { // {{{
 	if h.R.Method == "GET" || h.R.Method == "HEAD" || h.R.Method == "OPTIONS" {
 		h.Form = h.R.URL.Query()
@@ -789,34 +796,99 @@ func (h *httpContainer) render(errno int32, errmsg string, retdata any) { // {{{
 	h.W.Write(data)
 } // }}}
 
-// 输出HTTP流
-func (h *httpContainer) RenderStream(data any) error { // {{{
-	stream, ok := data.([]byte)
-	if !ok {
-		return fmt.Errorf("render data type is not []byte!")
+// SetBufWriterSize 设置流式输出缓冲区大小。
+// 必须在第一次调用 StreamWriter / RenderStream / FlushStream 之前调用，
+// 否则已创建的 bufWriter 不会被重新初始化。
+func (h *httpContainer) SetBufWriterSize(size int) { // {{{
+	if size > 0 {
+		h.bufWriterSize = size
+	}
+} // }}}
+
+// getBufWriter 懒加载缓冲写入器，整个请求生命周期内复用同一个实例。
+func (h *httpContainer) getBufWriter() *bufio.Writer { // {{{
+	if h.bufWriter == nil {
+		size := h.bufWriterSize
+		if size <= 0 {
+			size = defaultBufWriterSize
+		}
+		h.bufWriter = bufio.NewWriterSize(h.W, size)
 	}
 
+	return h.bufWriter
+} // }}}
+
+// flushBufWriter 内部收尾 flush，忽略错误（供 Final 使用）
+func (h *httpContainer) flushBufWriter() { // {{{
+	if h.bufWriter == nil {
+		return
+	}
+
+	if err := h.bufWriter.Flush(); err != nil {
+		return
+	}
+
+	if flusher, ok := h.W.(http.Flusher); ok {
+		flusher.Flush()
+	}
+} // }}}
+
+// StreamWriter 返回框架管理的缓冲写入器，供业务自行组装
+// csv.Writer、json.Encoder 等流式输出使用。
+//
+// 业务调用示例：
+//
+//	cw := csv.NewWriter(h.StreamWriter())
+//	cw.Write([]string{"id", "name"})
+//	cw.Flush()
+//	h.FlushStream()
+func (h *httpContainer) StreamWriter() io.Writer { // {{{
+	return h.getBufWriter()
+} // }}}
+
+// FlushStream 将缓冲区数据推送到客户端，并触发 http.Flusher。
+// 配合 StreamWriter 使用；RenderStream 内部也会调用。
+func (h *httpContainer) FlushStream() error { // {{{
 	select {
 	case <-h.R.Context().Done():
-		// 客户端断开连接
+		// 客户端已断开
 		return fmt.Errorf("Client has terminated the request!")
 	default:
 		// 继续处理
 	}
 
-	if h.W != nil && stream != nil {
-		_, err := h.W.Write(stream)
-		if err != nil {
+	if h.bufWriter != nil {
+		if err := h.bufWriter.Flush(); err != nil {
 			return err
 		}
 	}
 
 	flusher, ok := h.W.(http.Flusher)
 	if !ok {
-		http.Error(h.W, "Streaming unsupported", http.StatusInternalServerError)
+		return fmt.Errorf("Streaming unsupported")
 	}
 
 	flusher.Flush()
 
 	return nil
+} // }}}
+
+// RenderStream 输出 HTTP 流（一次性写入 []byte 并 flush）。
+// 内部基于 StreamWriter + FlushStream 实现，与业务侧组装
+// csv.Writer 等共享同一个缓冲区。
+func (h *httpContainer) RenderStream(data any) error { // {{{
+	stream, ok := data.([]byte)
+	if !ok {
+		return fmt.Errorf("render data type is not []byte!")
+	}
+
+	if h.W == nil || stream == nil {
+		return nil
+	}
+
+	if _, err := h.StreamWriter().Write(stream); err != nil {
+		return err
+	}
+
+	return h.FlushStream()
 } // }}}

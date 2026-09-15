@@ -137,4 +137,6 @@ func (h *HTTP) Redirect(url string, codes ...int) { // {{{
 func (h *HTTP) HttpFinal() { // {{{
 	//将 ctx 写回 http.Request, 供中间件使用
 	*h.R = *h.R.WithContext(h.Ctx)
+
+	h.flushBufWriter()
 } // }}}
