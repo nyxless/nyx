@@ -143,12 +143,12 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 
 	buf := bytes.NewBufferString("")
 
-	buf.WriteString("insert into ")
+	buf.WriteString("INSERT INTO ")
 	buf.WriteString(table)
 	buf.WriteString(" (")
 	buf.WriteString(strings.Join(columns, ", "))
 	buf.WriteString(") ")
-	buf.WriteString(" values ")
+	buf.WriteString(" VALUES ")
 
 	// 构建占位符和值
 	var placeholders []string
@@ -197,15 +197,15 @@ func (s *SqlClient) Insert(table string, vals ...map[string]any) (int, error) { 
 	return int(lastid), nil
 } // }}}
 
-func (s *SqlClient) Update(table string, vals map[string]any, where string, val ...any) (int, error) { // {{{
+func (s *SqlClient) Update(table string, vals map[string]any, options ...FnSqlOption) (int, error) { // {{{
 	if len(vals) == 0 {
 		return 0, fmt.Errorf("no record found")
 	}
 
-	buf := bytes.NewBufferString("update ")
+	buf := bytes.NewBufferString("UPDATE ")
 
 	buf.WriteString(table)
-	buf.WriteString(" set ")
+	buf.WriteString(" SET ")
 
 	var value []any
 	var isExpr bool
@@ -234,12 +234,17 @@ func (s *SqlClient) Update(table string, vals map[string]any, where string, val 
 		i++
 	}
 
-	buf.WriteString(" where ")
-	buf.WriteString(where)
-	sqlstr := buf.String()
+	so := s.parseOptions(options)
 
-	value = append(value, val...)
-	result, err := s.Exec(sqlstr, value...)
+	if so.where == "" {
+		return 0, fmt.Errorf("no where conditions")
+	}
+
+	buf.WriteString(" WHERE ")
+	buf.WriteString(so.where)
+
+	value = append(value, so.vals...)
+	result, err := s.Exec(buf.String(), value...)
 	if err != nil {
 		return 0, err
 	}

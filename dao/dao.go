@@ -805,12 +805,23 @@ func (d *Dao) AddRecord(records ...map[string]any) (int, error) { //{{{
 // 按主键更新记录, id 参数为主键值
 func (d *Dao) SetRecord(record map[string]any, id any) (int, error) { //{{{
 	delete(record, d.primary)
-	return d.DBWriter.Update(d.table, record, d.primary+"=?", id)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithWhere(d.primary+"=?", []any{id}),
+		db.WithLimits("1"),
+	}
+	return d.DBWriter.Update(d.table, record, sqlOptions...)
 } // }}}
 
 // 按条件更新记录
-func (d *Dao) SetRecordBy(record map[string]any, where string, params ...any) (int, error) { //{{{
-	return d.DBWriter.Update(d.table, record, where, params...)
+func (d *Dao) SetRecordBy(record map[string]any, params ...any) (int, error) { //{{{
+	d.SetFilter(params...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithOrder(d.getOrder(false)),
+		db.WithWhere(d.getFilter()),
+	}
+	return d.DBWriter.Update(d.table, record, sqlOptions...)
 } // }}}
 
 // upsert 操作

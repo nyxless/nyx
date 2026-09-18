@@ -44,7 +44,7 @@ type DBClient interface {
 	Commit() error
 	Insert(table string, vals ...map[string]any) (int, error)
 	Upsert(table string, vals map[string]any, ignore_fields ...string) (int, error)
-	Update(table string, vals map[string]any, where string, val ...interface{}) (int, error)
+	Update(table string, vals map[string]any, sqlOptions ...FnSqlOption) (int, error)
 	Delete(sqlOptions ...FnSqlOption) (int, error)
 	Execute(query string, val ...any) (int, error)
 	GetOne(sqlOptions ...FnSqlOption) (any, error)
