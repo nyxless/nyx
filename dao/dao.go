@@ -819,6 +819,7 @@ func (d *Dao) SetRecordBy(record map[string]any, params ...any) (int, error) { /
 
 	sqlOptions := []db.FnSqlOption{
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 	}
 	return d.DBWriter.Update(d.table, record, sqlOptions...)
@@ -952,6 +953,8 @@ func (d *Dao) DelRecords(params ...any) (int, error) { //{{{
 	sqlOptions := []db.FnSqlOption{
 		db.WithTable(d.table),
 		db.WithWhere(d.getFilter()),
+		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 	}
 
 	return d.DBWriter.Delete(sqlOptions...)
@@ -1008,6 +1011,7 @@ func (d *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1050,6 +1054,7 @@ func (d *Dao) GetUniqueValues(field string, params ...any) ([]any, error) { //{{
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1097,6 +1102,7 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1132,6 +1138,7 @@ func (d *Dao) GetGroupMap(keyfield string, params ...any) (map[any]map[string]an
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1167,6 +1174,7 @@ func (d *Dao) GetGroupMaps(keyfield string, params ...any) (map[any][]map[string
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1254,6 +1262,7 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
+		db.WithOrder(d.getOrder(false)),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
