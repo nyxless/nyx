@@ -886,9 +886,6 @@ func (h *httpContainer) RenderStream(data any) error { // {{{
 		return nil
 	}
 
-	if _, err := h.StreamWriter().Write(stream); err != nil {
-		return err
-	}
-
-	return h.FlushStream()
+	_, err := h.StreamWriter().Write(stream)
+	return err
 } // }}}
