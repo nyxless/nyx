@@ -158,30 +158,32 @@ func (n *Nyx) useHttpMiddlewares() { // {{{
 	if x.Conf.GetDefBool(false, "auth", "api_check", "enabled") { // {{{
 		allowed_groups := x.Conf.GetDefStringSlice([]string{}, "auth", "api_check", "allowed_groups")
 
-		confAuthApp := map[string]string{}
-		confAuthAppApiAllow := map[string][]string{}
-		confAuthAppApiForbid := map[string][]string{}
+		if middleware.DefaultApiAuthConfig == nil {
+			confAuthApp := map[string]string{}
+			confAuthAppApiAllow := map[string][]string{}
+			confAuthAppApiForbid := map[string][]string{}
 
-		for _, v := range x.Conf.GetMapSlice("auth", "app") {
-			appid := x.AsString(v["appid"])
-			confAuthApp[appid] = x.AsString(v["secret"])
+			for _, v := range x.Conf.GetMapSlice("auth", "app") {
+				appid := x.AsString(v["appid"])
+				confAuthApp[appid] = x.AsString(v["secret"])
 
-			confAuthAppApiAllow[appid] = x.AsStringSlice(v["api_allow"])
-			confAuthAppApiForbid[appid] = x.AsStringSlice(v["api_forbid"])
+				confAuthAppApiAllow[appid] = x.AsStringSlice(v["api_allow"])
+				confAuthAppApiForbid[appid] = x.AsStringSlice(v["api_forbid"])
+			}
+
+			middleware.DefaultApiAuthConfig = &middleware.AuthConfig{
+				AppSecrets:  confAuthApp,
+				CheckTTL:    x.Conf.GetDefInt(3600, "auth", "api_check", "ttl"),
+				CheckNonce:  x.Conf.GetDefBool(false, "auth", "api_check", "check_nonce"),
+				CheckMethod: x.Conf.GetStringSlice("auth", "api_check", "method"),
+				CheckExcept: x.Conf.GetStringSlice("auth", "api_check", "except"),
+				CheckAllow:  confAuthAppApiAllow,
+				CheckForbid: confAuthAppApiForbid,
+				LocalCache:  x.LocalCache,
+			}
 		}
 
-		c := &middleware.AuthConfig{
-			AppSecrets:  confAuthApp,
-			CheckTTL:    x.Conf.GetDefInt(3600, "auth", "api_check", "ttl"),
-			CheckNonce:  x.Conf.GetDefBool(false, "auth", "api_check", "check_nonce"),
-			CheckMethod: x.Conf.GetStringSlice("auth", "api_check", "method"),
-			CheckExcept: x.Conf.GetStringSlice("auth", "api_check", "except"),
-			CheckAllow:  confAuthAppApiAllow,
-			CheckForbid: confAuthAppApiForbid,
-			LocalCache:  x.LocalCache,
-		}
-
-		x.UseHttpMiddleware(middleware.ApiAuth(c), allowed_groups...)
+		x.UseHttpMiddleware(middleware.ApiAuth(), allowed_groups...)
 
 		x.Info("Load http middleware: ", "ApiAuth")
 	} // }}}
@@ -230,30 +232,32 @@ func (n *Nyx) useRpcMiddlewares() { // {{{
 	if x.Conf.GetDefBool(false, "auth", "rpc_check", "enabled") { // {{{
 		allowed_groups := x.Conf.GetDefStringSlice([]string{}, "auth", "rpc_check", "allowed_groups")
 
-		confAuthApp := map[string]string{}
-		confAuthAppRpcAllow := map[string][]string{}
-		confAuthAppRpcForbid := map[string][]string{}
+		if middleware.DefaultRpcAuthConfig == nil {
+			confAuthApp := map[string]string{}
+			confAuthAppRpcAllow := map[string][]string{}
+			confAuthAppRpcForbid := map[string][]string{}
 
-		for _, v := range x.Conf.GetMapSlice("auth", "app") {
-			appid := x.AsString(v["appid"])
-			confAuthApp[appid] = x.AsString(v["secret"])
+			for _, v := range x.Conf.GetMapSlice("auth", "app") {
+				appid := x.AsString(v["appid"])
+				confAuthApp[appid] = x.AsString(v["secret"])
 
-			confAuthAppRpcAllow[appid] = x.AsStringSlice(v["rpc_allow"])
-			confAuthAppRpcForbid[appid] = x.AsStringSlice(v["rpc_forbid"])
+				confAuthAppRpcAllow[appid] = x.AsStringSlice(v["rpc_allow"])
+				confAuthAppRpcForbid[appid] = x.AsStringSlice(v["rpc_forbid"])
+			}
+
+			middleware.DefaultRpcAuthConfig = &middleware.AuthConfig{
+				AppSecrets:  confAuthApp,
+				CheckTTL:    x.Conf.GetDefInt(3600, "auth", "rpc_check", "ttl"),
+				CheckNonce:  x.Conf.GetDefBool(false, "auth", "rpc_check", "check_nonce"),
+				CheckMethod: x.Conf.GetStringSlice("auth", "rpc_check", "method"),
+				CheckExcept: x.Conf.GetStringSlice("auth", "rpc_check", "except"),
+				CheckAllow:  confAuthAppRpcAllow,
+				CheckForbid: confAuthAppRpcForbid,
+				LocalCache:  x.LocalCache,
+			}
 		}
 
-		c := &middleware.AuthConfig{
-			AppSecrets:  confAuthApp,
-			CheckTTL:    x.Conf.GetDefInt(3600, "auth", "rpc_check", "ttl"),
-			CheckNonce:  x.Conf.GetDefBool(false, "auth", "rpc_check", "check_nonce"),
-			CheckMethod: x.Conf.GetStringSlice("auth", "rpc_check", "method"),
-			CheckExcept: x.Conf.GetStringSlice("auth", "rpc_check", "except"),
-			CheckAllow:  confAuthAppRpcAllow,
-			CheckForbid: confAuthAppRpcForbid,
-			LocalCache:  x.LocalCache,
-		}
-
-		x.UseRpcMiddleware(middleware.RpcAuth(c), allowed_groups...)
+		x.UseRpcMiddleware(middleware.RpcAuth(), allowed_groups...)
 
 		x.Info("Load rpc middleware: ", "RpcAuth")
 	} // }}}

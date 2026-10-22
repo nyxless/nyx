@@ -3,7 +3,9 @@ package x
 import (
 	"crypto/hmac"
 	"crypto/md5"
+	crand "crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/cespare/xxhash/v2"
@@ -55,6 +57,15 @@ func Crc32(str string) int { // {{{
 	ieee := crc32.NewIEEE()
 	io.WriteString(ieee, str)
 	return int(ieee.Sum32())
+} // }}}
+
+// 生成 sha256 安全密钥 -> Base64 字符串
+func GenSha256Key() (string, error) { // {{{
+	b := make([]byte, 32)
+	if _, err := crand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 } // }}}
 
 // SHA256哈希函数, 第二参数为密钥，有更高安全需求时使用

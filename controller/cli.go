@@ -17,6 +17,11 @@ func (c *CLI) Prepare(params url.Values, controller, action, group string) { // 
 	c.Controller.Prepare(context.Background(), controller, action, group)
 } // }}}
 
+func (c *CLI) RenderError(err any) { // {{{
+	errno, errmsg, retdata := c.GetErrorResponse(err)
+	x.Println(errno, errmsg, retdata)
+} // }}}
+
 func (c *CLI) GetParams() x.MAP { // {{{
 	params := x.MAP{}
 

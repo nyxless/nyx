@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	DefaultApiAuthFn = func(config *AuthConfig, r *http.Request) (string, bool) { // {{{
+	DefaultApiAuthHandler = func(config *AuthConfig, r *http.Request) (string, bool) { // {{{
 		// 从Header获取认证参数
 		appID := r.Header.Get("appid")
 		nonce := r.Header.Get("nonce")
@@ -57,7 +57,7 @@ var (
 		return appID, x.VerifySha256(token, appID+nonce+timestamp, secret)
 	} // }}}
 
-	DefaultRpcAuthFn = func(config *AuthConfig, ctx context.Context) (string, bool) { // {{{
+	DefaultRpcAuthHandler = func(config *AuthConfig, ctx context.Context) (string, bool) { // {{{
 		var appID, secret string
 		if headers, ok := metadata.FromIncomingContext(ctx); ok {
 			if v, ok := headers["appid"]; ok {
@@ -113,14 +113,16 @@ type AuthConfig struct {
 	LocalCache  cache.LocalCache
 }
 
-func ApiAuth(config *AuthConfig) x.HttpMiddleware { // {{{
-	checkMethod, checkExcept, checkAllow, checkForbid := parseConfig(config)
+var DefaultApiAuthConfig, DefaultRpcAuthConfig *AuthConfig
+
+func ApiAuth() x.HttpMiddleware { // {{{
+	checkMethod, checkExcept, checkAllow, checkForbid := parseConfig(DefaultApiAuthConfig)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			if CheckMethod(ctx, checkMethod, checkExcept) {
-				appID, passed := DefaultApiAuthFn(config, r)
+				appID, passed := DefaultApiAuthHandler(DefaultApiAuthConfig, r)
 				if !passed || !CheckAllow(ctx, appID, checkAllow, checkForbid) {
 					DefaultApiErrHandler(w, r)
 					return
@@ -132,13 +134,13 @@ func ApiAuth(config *AuthConfig) x.HttpMiddleware { // {{{
 	}
 } // }}}
 
-func RpcAuth(config *AuthConfig) x.RpcMiddleware { // {{{
-	checkMethod, checkExcept, checkAllow, checkForbid := parseConfig(config)
+func RpcAuth() x.RpcMiddleware { // {{{
+	checkMethod, checkExcept, checkAllow, checkForbid := parseConfig(DefaultRpcAuthConfig)
 
 	return func(next x.RpcHandler) x.RpcHandler {
 		return func(ctx context.Context, params map[string]any, stream x.Stream) (context.Context, *x.ResponseData, error) {
 			if CheckMethod(ctx, checkMethod, checkExcept) {
-				appID, passed := DefaultRpcAuthFn(config, ctx)
+				appID, passed := DefaultRpcAuthHandler(DefaultRpcAuthConfig, ctx)
 				if !passed || !CheckAllow(ctx, appID, checkAllow, checkForbid) {
 					return DefaultRpcErrHandler(ctx, params, stream)
 				}
@@ -254,13 +256,33 @@ func CheckAllow(ctx context.Context, appID string, checkAllows, checkForbids map
 } // }}}
 
 // 设置全局api鉴权函数
-func SetApiAuthFn(fn func(*AuthConfig, *http.Request) (string, bool)) { // {{{
-	DefaultApiAuthFn = fn
+func SetApiAuthHandler(fn func(*AuthConfig, *http.Request) (string, bool)) { // {{{
+	DefaultApiAuthHandler = fn
 } // }}}
 
 // 设置全局rpc鉴权函数
-func SetRpcAuthFn(fn func(*AuthConfig, context.Context) (string, bool)) { // {{{
-	DefaultRpcAuthFn = fn
+func SetRpcAuthHandler(fn func(*AuthConfig, context.Context) (string, bool)) { // {{{
+	DefaultRpcAuthHandler = fn
+} // }}}
+
+// 设置全局api鉴权错误处理
+func SetApiErrHandler(fn func(w http.ResponseWriter, r *http.Request)) { // {{{
+	DefaultApiErrHandler = fn
+} // }}}
+
+// 设置全局rpc鉴权错误处理
+func SetRpcErrHandler(fn func(ctx context.Context, params map[string]any, stream x.Stream) (context.Context, *x.ResponseData, error)) { // {{{
+	DefaultRpcErrHandler = fn
+} // }}}
+
+// 设置api鉴权配置
+func SetApiAuthConfig(c *AuthConfig) { // {{{
+	DefaultApiAuthConfig = c
+} // }}}
+
+// 设置rpc鉴权配置
+func SetRpcAuthConfig(c *AuthConfig) { // {{{
+	DefaultRpcAuthConfig = c
 } // }}}
 
 // 用于生成调式数据
