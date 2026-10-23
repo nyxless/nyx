@@ -1418,7 +1418,12 @@ func (d *Dao) getFromCache(fn func() (int, any, error), opts []db.FnSqlOption, t
 
 	got, hit, err := cacheGetFn(key, cacheFn, t, baseCacheCallbackFn)
 	if err != nil {
-		return nil, false, err
+		if got == nil {
+			return nil, false, err
+		}
+
+		// cache 函数出错，但sql 执行成功，有返回值
+		x.Warn("local cache err:", err, len(got))
 	}
 
 	var cache_data *CacheData

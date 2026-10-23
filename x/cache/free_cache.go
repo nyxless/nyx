@@ -82,7 +82,7 @@ func (fc *freeCache) GetOrRefreshFn(key []byte, fn func() (res []byte, update bo
 } // }}}
 
 func (fc *freeCache) setFn(key []byte, fn func() (res []byte, update bool, err error), expireSeconds int, callbackFn func([]byte) error) (res []byte, hit bool, err error) { // {{{
-	result, err, shared := fc.sf.Do(string(key), func() (any, error) { // {{{
+	result, err, hit := fc.sf.Do(string(key), func() (any, error) { // {{{
 		val, update, err := fn()
 		if err != nil {
 			return nil, err
@@ -91,13 +91,13 @@ func (fc *freeCache) setFn(key []byte, fn func() (res []byte, update bool, err e
 		if update {
 			err = fc.cache.Set(key, val, expireSeconds)
 			if err != nil {
-				return nil, err
+				return val, err
 			}
 
 			if callbackFn != nil {
 				err := callbackFn(val)
 				if err != nil {
-					return nil, err
+					return val, err
 				}
 			}
 		}
@@ -105,11 +105,11 @@ func (fc *freeCache) setFn(key []byte, fn func() (res []byte, update bool, err e
 		return val, nil
 	}) // }}}
 
-	if err != nil {
-		return nil, false, err
+	if result != nil {
+		res = result.([]byte)
 	}
 
-	return result.([]byte), shared, nil
+	return
 } // }}}
 
 func (fc *freeCache) SetAndGet(key, value []byte, expireSeconds int) (retValue []byte, found bool, err error) {
