@@ -121,8 +121,12 @@ func (d *Dao) Init(conf_name ...string) { //{{{
 
 	gob.Register(&CacheData{})
 	gob.Register(time.Time{})
-	gob.Register(map[string]interface{}{})
-	gob.Register([]map[string]interface{}{})
+	gob.Register([]any{})
+	gob.Register(map[any]any{})
+	gob.Register(map[string]any{})
+	gob.Register([]map[string]any{})
+	gob.Register(map[any]map[string]any{})
+	gob.Register(map[any][]map[string]any{})
 } // }}}
 
 func (d *Dao) InitTx(tx db.DBClient) { //使用事务{{{
