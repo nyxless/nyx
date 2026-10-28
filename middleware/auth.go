@@ -120,14 +120,20 @@ func ApiAuth() x.HttpMiddleware { // {{{
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var appID string
+			var passed bool
+
 			ctx := r.Context()
 			if CheckMethod(ctx, checkMethod, checkExcept) {
-				appID, passed := DefaultApiAuthHandler(DefaultApiAuthConfig, r)
+				appID, passed = DefaultApiAuthHandler(DefaultApiAuthConfig, r)
 				if !passed || !CheckAllow(ctx, appID, checkAllow, checkForbid) {
 					DefaultApiErrHandler(w, r)
 					return
 				}
 			}
+
+			ctx = context.WithValue(ctx, "appid", appID)
+			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
 		})
