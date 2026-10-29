@@ -125,6 +125,7 @@ func (d *Dao) Init(conf_name ...string) { //{{{
 	gob.Register(map[any]any{})
 	gob.Register(map[string]any{})
 	gob.Register([]map[string]any{})
+	gob.Register(map[any][]any{})
 	gob.Register(map[any]map[string]any{})
 	gob.Register(map[any][]map[string]any{})
 } // }}}
@@ -1090,6 +1091,10 @@ func (d *Dao) GetUniqueValues(field string, params ...any) ([]any, error) { //{{
 } // }}}
 
 func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]any, error) { //{{{
+	return d.GetGroupValue(keyfield, valfield, params...)
+} // }}}
+
+func (d *Dao) GetGroupValue(keyfield, valfield string, params ...any) (map[any]any, error) { //{{{
 	d.SetFilter(params...)
 
 	field := d.GetFields()
@@ -1119,7 +1124,7 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 			return 0, nil, err
 		}
 
-		return 0, x.ArrayColumnMap(list, keyfield, valfield), nil
+		return 0, x.ArrayGroupValue(list, keyfield, valfield), nil
 
 	}, sqlOptions)
 
@@ -1128,6 +1133,42 @@ func (d *Dao) GetValuesMap(keyfield, valfield string, params ...any) (map[any]an
 	}
 
 	return res.(map[any]any), err
+} // }}}
+
+func (d *Dao) GetGroupValues(keyfield, valfield string, params ...any) (map[any][]any, error) { //{{{
+	d.SetFilter(params...)
+
+	sqlOptions := []db.FnSqlOption{
+		db.WithTable(d.table),
+		db.WithFields(d.GetFields()),
+		db.WithAlias(d.alias),
+		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
+		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithIdx(d.getIndex()),
+		db.WithGroup(d.getGroup()),
+		db.WithOrder(d.getOrder(false)),
+		db.WithLimits(d.getLimit()),
+		db.WithWhere(d.getFilter()),
+		db.WithBytes(d.getUseBytes()),
+		db.WithLock(d.getLock()),
+	}
+
+	res, err := d.getCache(func() (int, any, error) {
+
+		list, err := d.GetDBReader().GetAll(sqlOptions...)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return 0, x.ArrayGroupValues(list, keyfield, valfield), nil
+
+	}, sqlOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(map[any][]any), err
 } // }}}
 
 func (d *Dao) GetGroupMap(keyfield string, params ...any) (map[any]map[string]any, error) { //{{{

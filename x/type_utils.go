@@ -1415,9 +1415,24 @@ func ArrayColumnUnique[T comparable](m []map[string]T, column string) []T { // {
 } //}}}
 
 func ArrayColumnMap[T comparable](m []map[string]T, key, val string) map[T]T { // {{{
+	return ArrayGroupValue(m, key, val)
+} //}}}
+
+// map 列表按指定key/val字段，生成以key/val字段值为键值的map
+func ArrayGroupValue[T comparable](m []map[string]T, key, val string) map[T]T { // {{{
 	n := map[T]T{}
 	for _, i := range m {
 		n[i[key]] = i[val]
+	}
+
+	return n
+} //}}}
+
+// map 列表按指定key/val字段，生成以key字段值,val字段值列表为键值的map
+func ArrayGroupValues[T comparable](m []map[string]T, key, val string) map[T][]T { // {{{
+	n := map[T][]T{}
+	for _, i := range m {
+		n[i[key]] = append(n[i[key]], i[val])
 	}
 
 	return n
@@ -1604,6 +1619,148 @@ func intersectAny(a, b []interface{}) []interface{} { // {{{
 	}
 
 	return intersectDeep(a, b)
+} // }}}
+
+// 取 array 差集 a - b（在 a 中但不在 b 中的元素）
+func ArrayDiff[T any](a, b []T) []T { // {{{
+	if len(a) == 0 {
+		return []T{}
+	}
+	if len(b) == 0 {
+		// 拷贝一份，避免调用方修改影响原 slice
+		res := make([]T, len(a))
+		copy(res, a)
+		return res
+	}
+
+	// []interface{} 特殊处理
+	if _, ok := any(a).([]interface{}); ok {
+		return any(diffAny(any(a).([]interface{}), any(b).([]interface{}))).([]T)
+	}
+
+	// 可比较类型
+	if reflect.TypeOf(a[0]).Comparable() {
+		return diff(a, b)
+	}
+
+	// 不可比较类型用 DeepEqual
+	return diffDeep(a, b) // 用 DeepEqual，O(n*m)
+} // }}}
+
+func diff[T any](a, b []T) []T { // {{{
+	set := make(map[any]struct{}, len(b))
+	for _, v := range b {
+		set[v] = struct{}{}
+	}
+	res := make([]T, 0, len(a))
+	for _, v := range a {
+		if _, ok := set[v]; !ok {
+			res = append(res, v)
+		}
+	}
+	return res
+} // }}}
+
+func diffDeep[T any](a, b []T) []T { // {{{
+	res := make([]T, 0)
+	for i := 0; i < len(a); i++ {
+		found := false
+		for j := 0; j < len(b); j++ {
+			if reflect.DeepEqual(a[i], b[j]) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			res = append(res, a[i])
+		}
+	}
+	return res
+} // }}}
+
+func diffAny(a, b []interface{}) []interface{} { // {{{
+	// 尝试数值
+	set := make(map[int64]bool, len(b))
+	allNum := true
+	for _, v := range b {
+		if n, ok := NumToInt64(v); ok {
+			set[n] = true
+		} else {
+			allNum = false
+			break
+		}
+	}
+
+	if allNum {
+		res := make([]interface{}, 0)
+		for _, v := range a {
+			if n, ok := NumToInt64(v); ok && set[n] {
+				continue
+			}
+			res = append(res, v)
+		}
+		return res
+	}
+
+	return diffDeep(a, b)
+} // }}}
+
+// 取 array 对称差集（只在 a 或只在 b 中出现的元素）
+func ArraySymmetricDiff[T any](a, b []T) []T { // {{{
+	if len(a) == 0 {
+		res := make([]T, len(b))
+		copy(res, b)
+		return res
+	}
+	if len(b) == 0 {
+		res := make([]T, len(a))
+		copy(res, a)
+		return res
+	}
+
+	// []interface{} 特殊处理
+	if _, ok := any(a).([]interface{}); ok {
+		return any(symmetricDiffAny(any(a).([]interface{}), any(b).([]interface{}))).([]T)
+	}
+
+	if reflect.TypeOf(a[0]).Comparable() {
+		return symmetricDiff(a, b)
+	}
+	return symmetricDiffDeep(a, b)
+} // }}}
+
+func symmetricDiff[T any](a, b []T) []T { // {{{
+	setA := make(map[any]struct{}, len(a))
+	setB := make(map[any]struct{}, len(b))
+	for _, v := range a {
+		setA[v] = struct{}{}
+	}
+	for _, v := range b {
+		setB[v] = struct{}{}
+	}
+	res := make([]T, 0, len(a)+len(b))
+	for _, v := range a {
+		if _, ok := setB[v]; !ok {
+			res = append(res, v)
+		}
+	}
+	for _, v := range b {
+		if _, ok := setA[v]; !ok {
+			res = append(res, v)
+		}
+	}
+	return res
+} // }}}
+
+func symmetricDiffDeep[T any](a, b []T) []T { // {{{
+	res := make([]T, 0)
+	res = append(res, diffDeep(a, b)...)
+	res = append(res, diffDeep(b, a)...)
+	return res
+} // }}}
+
+func symmetricDiffAny(a, b []interface{}) []interface{} { // {{{
+	return append(diffAny(a, b), diffAny(b, a)...)
 } // }}}
 
 // 收集 map 的 key 到数组
