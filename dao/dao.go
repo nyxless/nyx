@@ -30,8 +30,7 @@ type Dao struct {
 	forceMaster          bool    //强制使用主库读，只能通过useMaster 使用一次
 	ctx                  context.Context
 	alias                string //表别名
-	leftJoin             []*Dao
-	innerJoin            []*Dao
+	joins                []*join
 	onPairs              []*onPair
 	cnt                  *int //存放查询总数的变量指针
 	useCache             bool //使用缓存
@@ -46,11 +45,20 @@ type Dao struct {
 // 缓存更新成功后回调函数, any 参数类型和当前调用的查询方法返回数据类型一致, 如 GetRecord: map[string]any, GetRecords: []map[string]any
 type CacheCallbackFn func(any) error
 
-type onPair struct {
-	Left    string
-	Right   string
-	Compare string
+type join struct {
+	dao      *Dao
+	joinType string
+	onPairs  []*onPair
 }
+
+type onPair struct {
+	Left       string
+	Right      string
+	RightConst any // 非 nil 表示 Right 是常量：普通值走 ? + joinVals，SQLExpr 原样拼接
+	Compare    string
+}
+
+type SQLExpr string // 标记为原样拼接的 SQL 表达式，不做字面量转义/参数化
 
 // 逻辑条件组合
 type Cond struct {
@@ -415,8 +423,35 @@ func (d *Dao) Alias(alias string) *Dao { // {{{
 	return d
 } // }}}
 
-func (d *Dao) LeftJoin(left_join ...*Dao) *Dao { // {{{
-	d.leftJoin = append(d.leftJoin, left_join...)
+func (d *Dao) LeftJoin(left_join *Dao) *Dao { // {{{
+	return d.Join(left_join, "LEFT JOIN")
+} // }}}
+
+func (d *Dao) InnerJoin(inner_join *Dao) *Dao { // {{{
+	return d.Join(inner_join)
+} // }}}
+
+// 使用Join 方法扩展 数据库支持的join 类型，默认 InnerJoin
+// 说明：On/CompareOn/OnConst 作用于“下一个 Join”，即 Join 为终点。
+// 主 dao 上设置的条件会在 Join 时快照到本次 join 并清空；参数 dao 上的条件由 parseJoin 消费后清空。
+func (d *Dao) Join(jd *Dao, ts ...string) *Dao { // {{{
+	t := "INNER JOIN"
+	if len(ts) > 0 {
+		t = ts[0]
+	}
+
+	j := &join{
+		dao:      jd,
+		joinType: t,
+	}
+
+	// 主表侧条件：Join 为终点，快照到本次 join 并清空主 dao 的 onPairs
+	if len(d.onPairs) > 0 {
+		j.onPairs = d.onPairs
+		d.onPairs = nil
+	}
+
+	d.joins = append(d.joins, j)
 	if d.alias == "" {
 		d.alias = "t"
 	}
@@ -424,20 +459,10 @@ func (d *Dao) LeftJoin(left_join ...*Dao) *Dao { // {{{
 	return d
 } // }}}
 
-func (d *Dao) InnerJoin(inner_join ...*Dao) *Dao { // {{{
-	d.innerJoin = append(d.innerJoin, inner_join...)
-	if d.alias == "" {
-		d.alias = "t"
-	}
-
-	return d
-} // }}}
-
-// alias for InnerJoin
-func (d *Dao) Join(inner_join ...*Dao) *Dao { // {{{
-	return d.InnerJoin(inner_join...)
-} // }}}
-
+// On 连接条件（字段对字段）
+// 语义：调用方 dao 的 Left 字段 = 对方 dao 的 Right 字段
+//   - 主 dao 上调用：主表.Left = 参数表.Right
+//   - 参数 dao 上调用：参数表.Left = 主表.Right
 func (d *Dao) On(left_field string, right_fields ...string) *Dao { // {{{
 	return d.on("=", left_field, right_fields...)
 } // }}}
@@ -457,7 +482,39 @@ func (d *Dao) on(compare, left_field string, right_fields ...string) *Dao { // {
 		right_field = right_fields[0]
 	}
 
-	d.onPairs = append(d.onPairs, &onPair{left_field, right_field, compare})
+	d.onPairs = append(d.onPairs, &onPair{
+		Left:    left_field,
+		Right:   right_field,
+		Compare: compare,
+	})
+	return d
+} // }}}
+
+// OnConst 连接常量条件：调用方 dao 的 Left 字段 比较 常量
+// 注意：constExpr 不能传纯 nil（nil 表示"未设置常量"，会被当作字段名处理）。
+// 若要表达 NULL，请用 SQLExpr("NULL")。
+func (d *Dao) OnConst(left_field string, constExpr any) *Dao { // {{{
+	return d.onConst("=", left_field, constExpr)
+} // }}}
+
+func (d *Dao) NotOnConst(left_field string, constExpr any) *Dao { // {{{
+	return d.onConst("!=", left_field, constExpr)
+} // }}}
+
+func (d *Dao) CompareOnConst(compare, left_field string, constExpr any) *Dao { // {{{
+	return d.onConst(compare, left_field, constExpr)
+} // }}}
+
+func (d *Dao) onConst(compare, left_field string, constExpr any) *Dao { // {{{
+	if constExpr == nil {
+		x.Notice("[OnConst] nil constExpr ignored, field:", left_field)
+		return d
+	}
+	d.onPairs = append(d.onPairs, &onPair{
+		Left:       left_field,
+		Compare:    compare,
+		RightConst: constExpr,
+	})
 	return d
 } // }}}
 
@@ -836,7 +893,7 @@ func (d *Dao) ResetRecord(record map[string]any) (int, error) { //{{{
 } // }}}
 
 // 按主键查询记录
-func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
+func (d *Dao) GetRecord(id any) (map[string]any, error) { // {{{
 	var primary string
 	if d.alias != "" {
 		primary = d.alias + "." + d.primary
@@ -844,26 +901,24 @@ func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 		primary = d.primary
 	}
 
+	d.SetFilter(primary+"=?", id)
+
 	sqlOptions := []db.FnSqlOption{
 		db.WithTable(d.table),
 		db.WithFields(d.GetFields()),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
-		db.WithWhere(primary+"=?", []any{id}),
+		db.WithJoins(d.parseJoin(d.joins)),
+		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
 	}
 
 	res, err := d.getCache(func() (int, any, error) {
-
 		row, err := d.GetDBReader().GetRow(sqlOptions...)
 		if err != nil {
 			return 0, nil, err
 		}
-
 		return 0, row, err
-
 	}, sqlOptions)
 
 	if err != nil {
@@ -876,54 +931,126 @@ func (d *Dao) GetRecord(id any) (map[string]any, error) { //{{{
 	return res.(map[string]any), nil
 } // }}}
 
-func (d *Dao) parseJoin(joinons []*Dao) []string { // {{{
-	if len(joinons) == 0 {
-		return nil
+// 构建单个 on 条件
+// leftAlias:  Left 字段的别名前缀（字段已带 "." 时不重复加）
+// rightAlias: Right 字段的别名前缀（RightConst 非 nil 时忽略）
+// 返回: SQL 片段、可选参数值（非 nil 时需追加到 joinVals）
+func (d *Dao) buildOnPair(p *onPair, leftAlias, rightAlias string) (string, any) { // {{{
+	on := p.Compare
+	if on == "" {
+		on = "="
 	}
 
-	var joins []string
-	for i, v := range joinons {
-		var join string
+	left := p.Left
+	if !strings.Contains(left, ".") {
+		left = leftAlias + "." + left
+	}
 
+	var right string
+	var val any
+
+	if p.RightConst != nil {
+		if expr, ok := p.RightConst.(SQLExpr); ok {
+			right = string(expr)
+		} else {
+			right = "?"
+			val = p.RightConst
+		}
+	} else {
+		if p.Right == "" {
+			// 防御：字段名为空（理论上 onConst 已拦截 nil，这里兜底）
+			return "", nil
+		}
+		right = p.Right
+		if !strings.Contains(right, ".") {
+			right = rightAlias + "." + right
+		}
+	}
+
+	return left + on + right, val
+} // }}}// parseJoin 构建 join 子句
+
+// 参数 dao 的 where 会合并进主 dao 的 filter，由后续 getFilter 统一消费
+// 注意：必须在 getFilter 之前调用
+func (d *Dao) parseJoin(joins []*join) ([]string, []any) { // {{{
+	if len(joins) == 0 {
+		d.onPairs = nil
+		return nil, nil
+	}
+
+	if d.alias == "" {
+		d.alias = "t"
+	}
+
+	var joinSQLs []string
+	var joinVals []any
+
+	for i, j := range joins {
+		v := j.dao
 		tbl := v.GetTable()
 		al := v.alias
 		if al == "" {
 			al = "t" + strconv.Itoa(i)
 			v.Alias(al)
 		}
-		join += tbl + " " + al
+		joinon := j.joinType + " " + tbl + " " + al
 
-		for i, p := range v.onPairs {
-			if i == 0 {
-				join += " ON "
-			} else {
-				join += " AND "
+		var conds []string
+
+		// 参数 dao 自己的 onPairs：Left 参数表、Right 主表
+		for _, p := range v.onPairs {
+			sql, val := d.buildOnPair(p, al, d.alias)
+			if sql == "" {
+				continue
 			}
-
-			on := "="
-			if p.Compare != "" {
-				on = p.Compare
+			conds = append(conds, sql)
+			if val != nil {
+				joinVals = append(joinVals, val)
 			}
-
-			join += d.alias + "." + p.Left + on + al + "." + p.Right
 		}
 
-		joins = append(joins, join)
+		// 主dao 侧快照的 onPairs：Left 主表、Right 参数表
+		for _, p := range j.onPairs {
+			sql, val := d.buildOnPair(p, d.alias, al)
+			if sql == "" {
+				continue
+			}
+			conds = append(conds, sql)
+			if val != nil {
+				joinVals = append(joinVals, val)
+			}
+		}
+
+		for k, c := range conds {
+			if k == 0 {
+				joinon += " ON "
+			} else {
+				joinon += " AND "
+			}
+			joinon += c
+		}
+
+		// 参数 dao 的 onPairs 已消费，清空防止复用污染
+		v.onPairs = nil
+
+		joinSQLs = append(joinSQLs, joinon)
 
 		if len(v.fields) > 0 {
 			d.SetFields(db.FillAlias(al, strings.Join(v.fields, ",")))
+			v.fields = nil
 		}
-
 		if len(v.order) > 0 {
 			d.Order(db.FillAlias(al, strings.Join(v.order, ",")))
+			v.order = nil
 		}
 
+		// 参数 dao 的 where 合并进主 dao filter，由 getFilter 统一消费
 		if where, vals := v.getFilter(); where != "" {
 			d.SetFilter(where, vals)
 		}
 	}
 
-	return joins
+	return joinSQLs, joinVals
 } // }}}
 
 // 按主键删除数据
@@ -972,8 +1099,7 @@ func (d *Dao) getOne(field string, params ...any) (any, error) { //{{{
 		db.WithTable(d.table),
 		db.WithFields(field),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1011,8 +1137,7 @@ func (d *Dao) GetValues(field string, params ...any) ([]any, error) { //{{{
 		db.WithTable(d.table),
 		db.WithFields(field),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1054,8 +1179,7 @@ func (d *Dao) GetUniqueValues(field string, params ...any) ([]any, error) { //{{
 		db.WithTable(d.table),
 		db.WithFields(field),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1106,8 +1230,7 @@ func (d *Dao) GetGroupValue(keyfield, valfield string, params ...any) (map[any]a
 		db.WithTable(d.table),
 		db.WithFields(field),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1142,8 +1265,7 @@ func (d *Dao) GetGroupValues(keyfield, valfield string, params ...any) (map[any]
 		db.WithTable(d.table),
 		db.WithFields(d.GetFields()),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1178,8 +1300,7 @@ func (d *Dao) GetGroupMap(keyfield string, params ...any) (map[any]map[string]an
 		db.WithTable(d.table),
 		db.WithFields(d.GetFields()),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1214,8 +1335,7 @@ func (d *Dao) GetGroupMaps(keyfield string, params ...any) (map[any][]map[string
 		db.WithTable(d.table),
 		db.WithFields(d.GetFields()),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithOrder(d.getOrder(false)),
@@ -1252,8 +1372,7 @@ func (d *Dao) GetCount(params ...any) (int, error) { //{{{
 		db.WithTable(d.table),
 		db.WithFields(field),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithIdx(d.getIndex()),
 		db.WithGroup(d.getGroup()),
 		db.WithWhere(d.getFilter()),
@@ -1302,8 +1421,7 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 		db.WithTable(d.table),
 		db.WithFields(d.GetFields()),
 		db.WithAlias(d.alias),
-		db.WithLeftJoin(d.parseJoin(d.leftJoin)),
-		db.WithInnerJoin(d.parseJoin(d.innerJoin)),
+		db.WithJoins(d.parseJoin(d.joins)),
 		db.WithWhere(d.getFilter()),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1335,8 +1453,7 @@ func (d *Dao) GetRecordBy(params ...any) (map[string]any, error) { //{{{
 func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 	d.SetFilter(params...)
 
-	left_join := d.parseJoin(d.leftJoin)
-	inner_join := d.parseJoin(d.innerJoin)
+	joins, joinvals := d.parseJoin(d.joins)
 
 	idx := d.getIndex()
 	group := d.getGroup()
@@ -1350,8 +1467,7 @@ func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 		db.WithGroup(group),
 		db.WithOrder(d.getOrder(true)),
 		db.WithLimits(d.getLimit()),
-		db.WithLeftJoin(left_join),
-		db.WithInnerJoin(inner_join),
+		db.WithJoins(joins, joinvals),
 		db.WithWhere(where, values),
 		db.WithBytes(d.getUseBytes()),
 		db.WithLock(d.getLock()),
@@ -1377,7 +1493,7 @@ func (d *Dao) GetRecords(params ...any) ([]map[string]any, error) { //{{{
 				return 0, nil, err
 			}
 
-			count, err = db_reader.GetOne(db.WithTable(d.table), db.WithAlias(d.alias), db.WithLeftJoin(left_join), db.WithInnerJoin(inner_join), db.WithFields("count(1) as total"), db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values))
+			count, err = db_reader.GetOne(db.WithTable(d.table), db.WithAlias(d.alias), db.WithJoins(joins, joinvals), db.WithFields("count(1) as total"), db.WithIdx(idx), db.WithGroup(group), db.WithWhere(where, values))
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return 0, nil, nil
@@ -1500,9 +1616,13 @@ func (d *Dao) getCacheKey(opts []db.FnSqlOption) []byte { // {{{
 		sb.WriteString("#")
 		sb.WriteString(so.GetIdx())
 		sb.WriteString("#")
-		sb.WriteString(strings.Join(so.GetLeftJoin(), ","))
+		sb.WriteString(strings.Join(so.GetJoins(), ","))
 		sb.WriteString("#")
-		sb.WriteString(strings.Join(so.GetInnerJoin(), ","))
+		// join 的参数值（顺序与 SQL 中 ? 一致）
+		for _, v := range so.GetJoinVals() {
+			sb.WriteString(",")
+			sb.WriteString(x.AsString(v))
+		}
 		sb.WriteString("#")
 		sb.WriteString(so.GetWhere())
 		sb.WriteString("#")

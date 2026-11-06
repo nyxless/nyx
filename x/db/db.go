@@ -59,20 +59,20 @@ type DBClient interface {
 type FnSqlOption func(*SqlOption)
 
 type SqlOption struct {
-	table     string
-	fields    string
-	alias     string
-	leftJoin  []string
-	innerJoin []string
-	idx       string
-	group     string
-	order     string
-	limits    string
-	lock      bool
-	where     string
-	sql       string //将忽略以上的配置
-	vals      []any
-	useBytes  bool //独立配置，是否保留[]byte,sql.RawBytes 字段类型，默认转换为 string
+	table    string
+	fields   string
+	alias    string
+	joins    []string
+	joinVals []any
+	idx      string
+	group    string
+	order    string
+	limits   string
+	lock     bool
+	where    string
+	sql      string //将忽略以上的配置
+	vals     []any
+	useBytes bool //独立配置，是否保留[]byte,sql.RawBytes 字段类型，默认转换为 string
 }
 
 func (so *SqlOption) ToSql() (string, []any) { //{{{
@@ -81,6 +81,7 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 	}
 
 	var sb strings.Builder
+	var vals []any
 
 	sb.WriteString("SELECT ")
 
@@ -108,18 +109,16 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 		sb.WriteString(")")
 	}
 
-	if len(so.leftJoin) > 0 {
-		for _, j := range so.leftJoin {
-			sb.WriteString(" LEFT JOIN ")
+	if len(so.joins) > 0 {
+		for _, j := range so.joins {
+			sb.WriteString(" ")
 			sb.WriteString(j)
 		}
 	}
 
-	if len(so.innerJoin) > 0 {
-		for _, j := range so.innerJoin {
-			sb.WriteString(" INNER JOIN ")
-			sb.WriteString(j)
-		}
+	// joinVals 在 where vals 之前，顺序与 SQL 中 ? 出现顺序一致
+	if len(so.joinVals) > 0 {
+		vals = append(vals, so.joinVals...)
 	}
 
 	if so.where != "" {
@@ -127,11 +126,14 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 		sb.WriteString(so.where)
 	}
 
+	if len(so.vals) > 0 {
+		vals = append(vals, so.vals...)
+	}
+
 	if so.group != "" {
 		if so.alias != "" {
 			so.group = FillAlias(so.alias, so.group)
 		}
-
 		sb.WriteString(" GROUP BY ")
 		sb.WriteString(so.group)
 	}
@@ -140,7 +142,6 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 		if so.alias != "" {
 			so.order = FillAlias(so.alias, so.order)
 		}
-
 		sb.WriteString(" ORDER BY ")
 		sb.WriteString(so.order)
 	}
@@ -154,7 +155,7 @@ func (so *SqlOption) ToSql() (string, []any) { //{{{
 		sb.WriteString(" FOR UPDATE")
 	}
 
-	return sb.String(), so.vals
+	return sb.String(), vals
 } // }}}
 
 func (so *SqlOption) GetTable() string { // {{{
@@ -169,12 +170,12 @@ func (so *SqlOption) GetAlias() string { // {{{
 	return so.alias
 } // }}}
 
-func (so *SqlOption) GetLeftJoin() []string { // {{{
-	return so.leftJoin
+func (so *SqlOption) GetJoins() []string { // {{{
+	return so.joins
 } // }}}
 
-func (so *SqlOption) GetInnerJoin() []string { // {{{
-	return so.innerJoin
+func (so *SqlOption) GetJoinVals() []any { // {{{
+	return so.joinVals
 } // }}}
 
 func (so *SqlOption) GetIdx() string { // {{{
@@ -231,15 +232,10 @@ func WithAlias(alias string) FnSqlOption { // {{{
 	}
 } // }}}
 
-func WithLeftJoin(left_join []string) FnSqlOption { // {{{
+func WithJoins(joins []string, vals []any) FnSqlOption { // {{{
 	return func(s *SqlOption) {
-		s.leftJoin = left_join
-	}
-} // }}}
-
-func WithInnerJoin(inner_join []string) FnSqlOption { // {{{
-	return func(s *SqlOption) {
-		s.innerJoin = inner_join
+		s.joins = joins
+		s.joinVals = vals
 	}
 } // }}}
 
