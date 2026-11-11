@@ -53,6 +53,8 @@ func (h *httpContainer) Prepare() { // {{{
 		if err = h.R.ParseMultipartForm(h.MaxPostSize); err == nil {
 			h.Form = h.R.Form
 		}
+	} else {
+		h.Form = h.R.URL.Query()
 	}
 
 	if err != nil {

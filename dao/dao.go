@@ -667,6 +667,12 @@ func parseMap(m map[string]any, defAlias string) (string, []any) { // {{{
 			case "ne":
 				parts = append(parts, fmt.Sprintf("%s`%s` != ?", alias, field))
 				vals = append(vals, val)
+			case "ilike": //部分DB支持
+				parts = append(parts, fmt.Sprintf("%s`%s` ILIKE ?", alias, field))
+				vals = append(vals, val)
+			case "notilike": //部分DB支持
+				parts = append(parts, fmt.Sprintf("%s`%s` NOT ILIKE ?", alias, field))
+				vals = append(vals, val)
 			case "like":
 				parts = append(parts, fmt.Sprintf("%s`%s` LIKE ?", alias, field))
 				vals = append(vals, val)
